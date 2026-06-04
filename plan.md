@@ -9,10 +9,8 @@ convincingly enough that the prototype code runs as if it were real. The point i
 people explore, test, and critique an app _before_ anyone writes production code.
 
 The core insight that drives the whole architecture: **a prototype is just JavaScript
-surrounded by a library of convincingly faked elements.** We build the library once and reuse
-it. The agent's job is to configure the library and write the genuinely app-specific bits.
-Missing elements from the library are generated and consolidated on the fly, but we will seed
-the library with as much of the core structure as possible.
+surrounded by a library of fakes.** We build the library once and reuse it. The agent's job is to
+configure the library and write the genuinely app-specific bits.
 
 ### Two foundations, not one
 
@@ -122,6 +120,12 @@ outside world. Build this before the agent, because it defines what the agent mu
 
 - [ ] **Reset / replay.** Wipe the prototype's IndexedDB back to seed; restart the clock; the
       app should come up identically. This is what makes testing repeatable.
+- [ ] **Resume rule: persisted state is the source of truth.** When an app persists state that a
+      world-simulator actor also influences (e.g. an order's status while a driver actor is
+      moving), reload must NOT blindly replay the actor from seed-zero — that can teleport the
+      driver to a position inconsistent with the persisted status. Rule: on reload, restore
+      persisted state first, then have the simulator RESUME FROM it, not replay from the
+      beginning. (Surfaced by the food-delivery walkthrough; see notes §9.)
 
 ## Phase 2 — The data foundation (fake DB + fake API)
 
@@ -170,6 +174,14 @@ The biggest single source of leverage. Build once, works for any schema.
       so apps aren't empty. Seeded/deterministic so resets repeat. Use the OpenAI API to make
       fake data believable (real-sounding names, sensible values).
 - [ ] **Persistence wiring.** Per-prototype IndexedDB namespace; survive refresh; reset to seed.
+- [ ] **OPEN QUESTION — state machines & field-write-ownership.** Two real constraints the schema
+      can currently only _hint_ at via the open layer, not enforce: (a) an enum field is often
+      really a state machine with legal transitions (an order's status), and (b) some fields may
+      only be written by one writer (a driver's position, written only by the simulator, never by
+      user CRUD). Decide whether these deserve first-class support in the strict core or stay as
+      code-enforced conventions. Current lean: conventions for now, but flagged because state
+      machines recur in EVERY reactive app with a lifecycle. (Surfaced by the food-delivery
+      walkthrough; see notes §6.)
 
 ## Phase 3 — The world foundation (the event simulator)
 
@@ -186,6 +198,12 @@ The second engine. Makes reactive and realtime apps feel alive instead of dead.
       a log stream, incoming ride requests, a webhook source).
 - [ ] **Stochastic-but-reproducible.** Randomness flows from the seed, never `Math.random()`
       directly, so "run it again" gives the same run.
+- [ ] **Library pattern: "action that spawns an actor."** A recurring shape where a user action
+      (a custom `api` endpoint) doesn't just write data — it _starts a world-simulator actor_.
+      Showed up as "place order" (kicks off the restaurant→driver→delivery process) and recurs in
+      ride-share (request → driver actor), booking (confirm → fulfilment), KYC (submit → approval
+      process). Name and reuse it rather than re-deriving per app. (Surfaced by the food-delivery
+      walkthrough.)
 
 ## Phase 4 — The simulation console (cockpit for driving prototypes)
 
@@ -196,6 +214,10 @@ everywhere.
 - [ ] **Event injector** — manually fire an event ("pretend a payment webhook just arrived").
 - [ ] **Event log** — everything that's happened, in order.
 - [ ] **State inspector** — peek at the current fake-DB contents and world state.
+- [ ] **Failure-injection controls.** Configure the failure/decline/timeout rate of any service
+      mock, seeded so it's reproducible. Surfaced as a standard console control, not a per-app
+      afterthought — the seeded occasional payment decline turned out to be one of the most
+      valuable testing affordances. (Surfaced by the food-delivery walkthrough; see Phase 5.)
 - [ ] **Request console** — fire requests at a headless API prototype and see responses.
 - [ ] Sits beside the prototype for UI apps; _is_ the main interface for headless ones.
 
@@ -203,7 +225,9 @@ everywhere.
 
 Each is a small module with a realistic interface, realistic latency, and realistic failure
 modes (they should sometimes fail/decline/timeout, because real services do). The agent picks
-from the shelf; it does not reinvent these.
+from the shelf; it does not reinvent these. Failure rates are SEEDED (notes §9) so "the 3rd
+charge declines" is reproducible, and tunable via the simulation console (Phase 4) — seeded
+failure injection is a first-class testing affordance, not an afterthought.
 
 - [ ] Auth / login (fake users, sessions, roles — needed by ~12 of the 40 apps)
 - [ ] Payments / Stripe-style (charge, decline, refund)

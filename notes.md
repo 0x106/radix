@@ -304,6 +304,26 @@ engine loads via IndexedDB and does relational/filter work in JS on top. That's 
 prototype data volumes — but it means we keep seed data to hundreds-to-thousands of rows, not
 millions, and we don't pretend it behaves like a real SQL database.
 
+### Open question — what the strict core can describe but not enforce
+
+The food-delivery walkthrough surfaced two real constraints the schema can currently only _hint_
+at via the open layer, not enforce:
+
+- **State machines.** An enum field is often really a state machine with legal transitions — an
+  order goes `cart → placed → accepted → preparing → picked_up → delivered`, never backwards or
+  skipping. The strict core can store the enum but doesn't know the transitions are constrained.
+- **Field-write-ownership.** Some fields have exactly one legitimate writer — a driver's position
+  is written only by the simulator, never by user CRUD. The strict core can store the field but
+  doesn't know who's allowed to write it.
+
+Open question: do these deserve first-class support in the strict core, or stay as code-enforced
+conventions? Current lean is conventions for now (enforcement lives in the fact that the UI simply
+never writes those fields, and the custom endpoint guards the transitions). But it's flagged
+rather than settled, because state machines recur in _every_ reactive app with a lifecycle —
+if they're common enough, first-class support might pay off. Note this is the one place the
+"strict core + open layer" split feels slightly under-powered: the constraint is real and
+structural, but it currently lives in the _open_ (ignored-by-machinery) layer.
+
 ---
 
 ## 7. Persistence — three tiers, kept separate
@@ -362,8 +382,25 @@ This forces a few rules through the whole system:
 - The world-simulator's event sequence is a deterministic function of its seed.
 - Reset wipes prototype data back to seed and restarts the clock; the app comes up identically.
 
+**Resume rule (persisted state wins over replay).** There's a subtlety when persisted state and a
+simulator actor both describe the same thing — e.g. an order's status is persisted _and_ a driver
+actor is mid-route. On reload we must NOT blindly replay the actor from seed-zero, because the
+replayed position can contradict the persisted status (the driver teleports). The rule: restore
+persisted state first, then have the simulator _resume from it_, not from the beginning. Persisted
+state is the source of truth; the simulator catches up to it rather than overriding it. (Surfaced
+by the food-delivery walkthrough — this is the kind of thing that's invisible until you trace a
+concrete mid-flight reload.)
+
 Get this right early; it's painful to retrofit because it touches time, randomness, the
 simulator, and persistence all at once.
+
+**A payoff worth calling out: seeded failure injection.** Because randomness is seeded, we can make
+service mocks fail on purpose and _reproducibly_ — "the 3rd charge in this seed declines." The
+food-delivery walkthrough found this to be one of the most valuable testing affordances: exercising
+the payment-declined path is annoying in a real build but trivial when the failure is a seeded
+fake. So failure rates for any service mock should be a tunable, surfaced control (in the
+simulation console), not a per-app afterthought. Determinism isn't only about repeatable
+success — it's what makes repeatable _failure_ possible, which is arguably more useful for testing.
 
 ---
 
@@ -379,6 +416,12 @@ gap_. This is not silent failure and not an afterthought — it's a core express
   pre-scripted content is easy and makes the app _look_ collaborative. Implementing _correct_
   real-time conflict resolution (OT/CRDT) is a research problem. So the agent fakes the appearance
   and clearly states the real merging isn't implemented. This is the template for all degradation.
+- Second worked example: live maps. A real maps SDK (tiles, geocoding, road routing) is exactly
+  the fiddly, setup-heavy real-world integration Radix is built to set aside. The agent renders a
+  simplified map surface with a marker that moves on real (simulated) events — preserving the
+  _experience_ of watching your driver approach — and stubs the rest: "real tiles and routing not
+  implemented." The principle both examples share: build the part that carries the experience,
+  fake the part that's just integration plumbing, and say which is which.
 - The user is always told plainly what's real and what's pretend.
 
 We deliberately _want_ some apps in the test set that trigger this path (collaborative editing,
@@ -415,6 +458,14 @@ fourth member of this family.
 
 The distinction from genuinely bespoke work: these have a recognisable, reusable shape. A game
 loop is a game loop. The truly per-app stuff is the specific content poured into these shapes.
+
+One more pattern of this kind, surfaced by the food-delivery walkthrough: **"action that spawns an
+actor."** A user action (a custom `api` endpoint) that doesn't just write data but _starts a
+world-simulator actor_ — "place order" kicks off the restaurant→driver→delivery process. It
+recurs anywhere a user action sets a real-world process in motion: ride-share (request → driver
+actor), booking (confirm → fulfilment), KYC (submit → approval). It's the natural seam between the
+two foundations — the data side records the action, the world side runs the consequence — so it's
+worth naming and reusing rather than re-deriving each time.
 
 ---
 
