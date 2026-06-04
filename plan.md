@@ -11,8 +11,8 @@ people explore, test, and critique an app _before_ anyone writes production code
 The core insight that drives the whole architecture: **a prototype is just JavaScript
 surrounded by a library of convincingly faked elements.** We build the library once and reuse
 it. The agent's job is to configure the library and write the genuinely app-specific bits.
-Missing elements from the library are generated and consolidated on the fly, but we will
-seed the library with as much of the core structure as possible.
+Missing elements from the library are generated and consolidated on the fly, but we will seed
+the library with as much of the core structure as possible.
 
 ### Two foundations, not one
 
@@ -87,8 +87,39 @@ outside world. Build this before the agent, because it defines what the agent mu
       Pausable, steppable, fast-forwardable. Critical for cron/jobs/timers and for
       deterministic replay. The world-simulator and any `setTimeout`-style behaviour route
       through this clock, not the real one.
-- [ ] **The prototype runtime API** — the single object the generated code uses to reach the
-      library: `db`, `api`, `events`, `services`, `clock`, `now`. Frozen, documented, versioned.
+- [ ] **The prototype runtime API** — the handles generated code uses to reach everything
+      outside itself. Frozen, documented, versioned. This is THE contract; everything targets
+      it. Organised in four layers (the first two are identical for every app; `host` varies
+      per shell). Keep the total under ~12 handles — every handle is forever.
+
+      Talking to the fakes (the library):
+      - `db` — structured entity data (the schema-driven store)
+      - `api` — call "the server"; auto-CRUD plus custom endpoints
+      - `services` — the shelf: auth, payments, email, etc. (request/response)
+      - `sensors` — signal sources you subscribe to, not call (heart rate, GPS); separate from
+        `services` because they're streams, not request/response
+      - `events` — subscribe/publish to the world-simulator's event bus
+
+      Talking to time and randomness (must be controlled, never real):
+      - `clock` — simulated time; steppable, pausable, fast-forwardable (`now` lives here as
+        `clock.now()` rather than a separate top-level handle)
+      - `random` — seeded randomness. The app MUST use this, never real `Math.random()`, or
+        deterministic replay breaks. Block the real one inside the sandbox.
+
+      Talking to the shell it lives in:
+      - `host` — what am I running in? Native-style notifications, viewport, back/rotate/resize,
+        stdin/stdout for terminals, the host-app API for embedded shells. This is an INTERFACE
+        with per-shell implementations, not one fixed object — a terminal's `host` and a
+        phone's `host` differ.
+      - `storage` — simple persistent key-value (settings, drafts, preferences), per-prototype,
+        separate from the entity DB.
+
+      Talking to Radix / the meta-layer:
+      - `stub` — the graceful-degradation hook; declare "this part is faked, here's what's
+        missing" so it surfaces in the manifest and UI (degradation is first-class, so it needs
+        a first-class API, not a code comment)
+      - `log` — emit to the simulation console's event log; the app's window into the cockpit
+
 - [ ] **Reset / replay.** Wipe the prototype's IndexedDB back to seed; restart the clock; the
       app should come up identically. This is what makes testing repeatable.
 
@@ -96,18 +127,48 @@ outside world. Build this before the agent, because it defines what the agent mu
 
 The biggest single source of leverage. Build once, works for any schema.
 
-- [ ] **Schema representation.** A declarative description of entities, fields, types, and
-      relationships. Loose and extensible — a guideline format, not a straitjacket (per the
-      "reference doc not a constraint" principle). The agent emits one of these per app.
-- [ ] **Schema-driven IndexedDB store.** A generic store that reads a schema and provides
-      object storage for it. No per-app code. Handles relations, indexes, queries.
-- [ ] **Auto-generated CRUD + query API.** From the schema, derive create/read/update/delete/
-      list/filter endpoints automatically. ~80% of an app's data needs come free.
-- [ ] **Custom endpoint hook.** A clean way for the agent to add the bespoke ~20% (derived
-      values, business logic) without touching the generic layer.
-- [ ] **Seed-data generation.** Generate plausible, realistic starter data from the schema so
-      apps aren't empty. Seeded/deterministic so resets are repeatable. (Use the OpenAI API
-      to make the fake data believable — real-sounding names, sensible values.)
+- [ ] **Schema representation — two layers, and the distinction is the whole point.** A naive
+      reading of "loose guideline" contradicts "generate a precise store from it." Resolve it
+      by splitting the schema into two regions: - **Strict core** — entities, fields, types, relationships. This is NOT loose. It has a
+      fixed, validated vocabulary because the store, the auto-CRUD API, and the seed
+      generator all read it mechanically. "Order has a total which is a number, belongs to a
+      Customer" must be precise or nothing downstream works. - **Open extension layer** — a free-form bag for everything the core can't express:
+      domain quirks, validation rules, computed-field hints, display hints, notes to the
+      agent. The generic machinery ignores it; the agent and custom code read it. This is
+      where "guideline not straitjacket" actually lives.
+
+      So the looseness sits in a clearly-marked open region AROUND a strict core, not in the
+      core itself. Example shape:
+      ```
+      Order:
+        fields:        # strict core — the engine reads this
+          total:  { type: number }
+          status: { type: enum, values: [pending, paid, shipped] }
+        relations:     # strict core
+          customer: { belongsTo: Customer }
+          items:    { hasMany: LineItem }
+        extensions:    # open layer — engine ignores, agent/custom code reads
+          statusFlow: "pending must precede paid"
+          displayHint: "timeline"
+      ```
+
+- [ ] **One generic store engine, configured per app — NOT generated per app.** We write the
+      store ONCE. It reads any schema's strict core at runtime and configures itself: creates
+      IndexedDB object stores, sets up indexes from relations, satisfies queries. The schema is
+      DATA fed to a fixed engine, not a template that emits new code. "Per app" means "the one
+      engine pointed at this app's schema" — same move as the world-simulator being one
+      configurable engine.
+- [ ] **Query reality check.** IndexedDB indexes single fields well; compound and relational
+      queries less so. The engine loads via IndexedDB and does relational/filter work in JS on
+      top. Fine at prototype volumes — keep seeds to hundreds-to-thousands of rows, not
+      millions. Don't expect Postgres behaviour.
+- [ ] **Custom endpoint hook = the escape hatch.** When the generic engine genuinely can't
+      express some query or logic, the agent writes a custom `api` endpoint rather than bending
+      the generic store. Generic engine covers ~80%; escape hatch covers the rest; the open
+      extension layer carries metadata that fits neither.
+- [ ] **Seed-data generation.** Generate plausible, realistic starter data from the strict core
+      so apps aren't empty. Seeded/deterministic so resets repeat. Use the OpenAI API to make
+      fake data believable (real-sounding names, sensible values).
 - [ ] **Persistence wiring.** Per-prototype IndexedDB namespace; survive refresh; reset to seed.
 
 ## Phase 3 — The world foundation (the event simulator)
@@ -249,7 +310,8 @@ The thing that lets quality compound over time.
 
 ## Cross-cutting concerns (track throughout, don't bolt on later)
 
-- [ ] **Determinism.** Seeded everything; reproducible runs are required for testing.
+- [ ] **Determinism.** Seeded everything; reproducible runs are required for testing. The app
+      uses the `random` handle, never real `Math.random()` — block the real one in the sandbox.
 - [ ] **Reset / replay** as a universal capability across every prototype.
 - [ ] **The runtime API contract** is the spine of the whole system — version it, freeze it,
       document it; everything else targets it.
