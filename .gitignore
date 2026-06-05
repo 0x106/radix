@@ -1,0 +1,6 @@
+# Dev tooling deps (repo-root package.json)
+/node_modules
+
+# Logs / OS cruft
+*.log
+.DS_Store
