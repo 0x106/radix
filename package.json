@@ -1,0 +1,21 @@
+{
+  "name": "radix-dev-tooling",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local dev tooling for Radix: author example prototype apps and push them to InstantDB via the admin SDK. Lives outside the Next app in app/.",
+  "type": "module",
+  "scripts": {
+    "push-examples": "tsx src/tests/push-examples.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@instantdb/admin": "^1.0.43",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@instantdb/react": "^1.0.43",
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
