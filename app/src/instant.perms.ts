@@ -3,22 +3,6 @@
 import type { InstantRules } from "@instantdb/react";
 
 const rules = {
-  files: {
-    allow: {
-      view: "auth.id in data.ref('folder.owner.id') || auth.id != null",
-      create: "auth.id != null",
-      delete: "auth.id in data.ref('folder.owner.id') || auth.id != null",
-      update: "auth.id in data.ref('folder.owner.id') || auth.id != null",
-    },
-  },
-  specs: {
-    allow: {
-      view: "auth.id in data.ref('owner.id') || auth.id != null",
-      create: "auth.id != null",
-      delete: "auth.id in data.ref('owner.id') || auth.id != null",
-      update: "auth.id in data.ref('owner.id') || auth.id != null",
-    },
-  },
   $users: {
     allow: {
       view: "auth.id == data.id",
@@ -26,36 +10,21 @@ const rules = {
       update: "auth.id == data.id",
     },
   },
-  folders: {
+  projects: {
     allow: {
-      view: "auth.id in data.ref('owner.id') || auth.id != null",
+      view: "auth.id in data.ref('owner.id')",
       create: "auth.id != null",
-      delete: "auth.id in data.ref('owner.id') || auth.id != null",
-      update: "auth.id in data.ref('owner.id') || auth.id != null",
+      update: "auth.id in data.ref('owner.id')",
+      delete: "auth.id in data.ref('owner.id')",
     },
   },
-  streams: {
+  // $files perms cannot use data.ref; gate by path instead.
+  // Bundles are uploaded under `projects/<ownerId>/<projectId>/index.html`.
+  $files: {
     allow: {
-      view: "auth.id in data.ref('owner.id') || auth.id != null",
-      create: "auth.id != null",
-      delete: "auth.id in data.ref('owner.id') || auth.id != null",
-      update: "auth.id in data.ref('owner.id') || auth.id != null",
-    },
-  },
-  messages: {
-    allow: {
-      view: "auth.id in data.ref('stream.owner.id') || auth.id != null",
-      create: "auth.id != null",
-      delete: "auth.id in data.ref('stream.owner.id') || auth.id != null",
-      update: "false",
-    },
-  },
-  actionLog: {
-    allow: {
-      view: "auth.id in data.ref('file.folder.owner.id') || auth.id != null",
-      create: "auth.id != null",
-      delete: "auth.id in data.ref('file.folder.owner.id') || auth.id != null",
-      update: "false",
+      view: "data.path.startsWith('projects/' + auth.id + '/')",
+      create: "data.path.startsWith('projects/' + auth.id + '/')",
+      delete: "data.path.startsWith('projects/' + auth.id + '/')",
     },
   },
 } satisfies InstantRules;

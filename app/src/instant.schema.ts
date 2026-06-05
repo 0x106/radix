@@ -4,50 +4,30 @@ import { i } from "@instantdb/react";
 
 const _schema = i.schema({
   entities: {
+    // Auto-created by Instant Storage on upload; required to use Storage.
     $files: i.entity({
       path: i.string().unique().indexed(),
       url: i.string(),
     }),
-    $streams: i.entity({
-      abortReason: i.string().optional(),
-      clientId: i.string().unique().indexed(),
-      done: i.boolean().optional(),
-      size: i.number().optional(),
-    }),
     $users: i.entity({
-      avatarUrl: i.string().optional(),
       email: i.string().unique().indexed().optional(),
-      imageURL: i.string().optional(),
-      name: i.string().optional(),
-      type: i.string().optional(),
+    }),
+    // A Radix project: a self-contained React app whose HTML bundle lives in
+    // Instant Storage (linked via `bundle`), owned by a user.
+    projects: i.entity({
+      name: i.string().indexed(),
+      description: i.string().optional(),
+      createdAt: i.number().indexed(),
     }),
   },
   links: {
-    $streams$files: {
-      forward: {
-        on: "$streams",
-        has: "many",
-        label: "$files",
-      },
-      reverse: {
-        on: "$files",
-        has: "one",
-        label: "$stream",
-        onDelete: "cascade",
-      },
+    projectOwner: {
+      forward: { on: "projects", has: "one", label: "owner", onDelete: "cascade" },
+      reverse: { on: "$users", has: "many", label: "projects" },
     },
-    $usersLinkedPrimaryUser: {
-      forward: {
-        on: "$users",
-        has: "one",
-        label: "linkedPrimaryUser",
-        onDelete: "cascade",
-      },
-      reverse: {
-        on: "$users",
-        has: "many",
-        label: "linkedGuestUsers",
-      },
+    projectBundle: {
+      forward: { on: "projects", has: "one", label: "bundle" },
+      reverse: { on: "$files", has: "one", label: "project", onDelete: "cascade" },
     },
   },
   rooms: {},
