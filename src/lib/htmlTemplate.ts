@@ -11,6 +11,8 @@
  * author components using `React.createElement` / `h`, or precompiled JSX). It
  * should set `window.App` to a React component.
  */
+import { runtimeSource } from "./spike/runtimeSource";
+
 export function wrapReactApp(opts: {
   title: string;
   componentSource: string;
@@ -51,6 +53,29 @@ export function wrapReactApp(opts: {
     </script>
   </body>
 </html>`;
+}
+
+/**
+ * Like `wrapReactApp`, but first installs the PHASE 0 SPIKE runtime shim
+ * (`window.radix` — the db/events/clock/random/log/spawn handles from
+ * ./spike/contract.ts) before running the prototype's component source. The
+ * prototype reads `window.radix.*` the same way it reads `window.React`.
+ *
+ * This is the packaging used for the three Phase 0 prototypes (habits/chat/cron)
+ * that exercise the runtime contract. `wrapReactApp` (no runtime) stays as-is for
+ * the plain counter/todo smoke tests.
+ */
+export function wrapPrototype(opts: {
+  title: string;
+  componentSource: string;
+}): string {
+  const { title, componentSource } = opts;
+  return wrapReactApp({
+    title,
+    // The runtime shim is plain browser JS that assigns window.radix; it must run
+    // before the component body, which is exactly the slot wrapReactApp inlines.
+    componentSource: `${runtimeSource}\n\n${componentSource}`,
+  });
 }
 
 function escapeHtml(s: string): string {
