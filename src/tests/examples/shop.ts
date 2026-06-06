@@ -1,14 +1,12 @@
 // PHASE 0 SPIKE — relational CRUD: an e-commerce storefront + admin.
 //
-// Purpose: stress the *relational* limits of the fake `db` (example-apps.md #6).
+// Purpose: exercise the *relational* side of the fake `db` (example-apps.md #6).
 // Three collections that reference each other by id — products, orders, and
 // orderItems (the join row carrying orderId + productId + qty). The store has NO
-// relations, NO joins, NO foreign keys, NO cascade: placing an order writes an
-// order row, N orderItems, and decrements N product stocks as separate,
-// non-atomic calls; the admin view reassembles an order by querying orderItems by
-// orderId and then db.get-ing each product (a hand-rolled N+1 join). This is the
-// app that most directly asks the "do we need GraphQL / a relation layer?"
-// question — see the summary doc.
+// cascade or transactions: placing an order writes an order row, N orderItems,
+// and decrements N product stocks as separate, non-atomic calls.
+// The admin view uses db.query's `include` option to resolve the product inline
+// rather than calling db.get in a loop.
 //
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
@@ -118,13 +116,12 @@ export const shop = {
       const items = useCollection('orderItems');
       const [open, setOpen] = useState(null);
 
-      // Hand-rolled join: filter the join collection by orderId, then resolve each
-      // product with db.get. This is exactly the N+1 read a relation/'include'
-      // layer (or GraphQL resolver) would hide.
       const linesFor = function (orderId) {
-        return db.query('orderItems', { where: { orderId: orderId } }).map(function (it) {
-          const p = db.get('products', it.productId);
-          return { it: it, name: p ? p.name : '(deleted product)' };
+        return db.query('orderItems', {
+          where: { orderId: orderId },
+          include: { product: { from: 'products', on: 'productId' } },
+        }).map(function (it) {
+          return { it: it, name: it.product ? it.product.name : '(deleted product)' };
         });
       };
 
