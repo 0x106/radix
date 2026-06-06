@@ -22,6 +22,7 @@ import { admin } from "./examples/admin";
 import { finance } from "./examples/finance";
 import { shop } from "./examples/shop";
 import { smarthome } from "./examples/smarthome";
+import { fooddelivery } from "./examples/fooddelivery";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
@@ -38,6 +39,7 @@ const examples = [
   { ...shop, wrap: wrapPrototype },
   // world engine examples: multiple concurrent actors, reactive + timer-based.
   { ...smarthome, wrap: wrapPrototype },
+  { ...fooddelivery, wrap: wrapPrototype },
 ];
 
 async function main() {
