@@ -38,7 +38,11 @@ export function ProjectFrame({ project }: { project: Project | null }) {
       key={project.id}
       src={url}
       title={project.name}
-      sandbox="allow-scripts"
+      // allow-scripts runs the bundle; allow-same-origin gives the frame a real
+      // (storage) origin so the runtime's IndexedDB persistence works. The bundle
+      // is served from the cross-origin InstantDB storage host, so this does NOT
+      // grant access to the Radix app's origin.
+      sandbox="allow-scripts allow-same-origin"
       className="h-full w-full flex-1 border-0 bg-white"
     />
   );

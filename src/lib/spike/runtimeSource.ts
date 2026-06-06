@@ -7,8 +7,9 @@
 // `wrapPrototype` (../htmlTemplate.ts) concatenates this BEFORE the prototype's
 // component source, so by the time the component runs, `window.radix` exists.
 //
-// Intentionally simple and hand-written — a single in-memory store, a single
-// event bus, a single steppable clock, a seeded PRNG, a log, and one actor
+// Intentionally simple and hand-written — a single store (in-memory working set
+// persisted through to IndexedDB), a single event bus, a single steppable clock,
+// a seeded PRNG, a log, and one actor
 // primitive. It is NOT the generic store/simulator engine (Phases 2/3); its only
 // job is to make the prototype<->library contract visible so Phase 1 can freeze
 // the real thing. Style is ES5-ish on purpose to keep the inlined source robust.
@@ -122,14 +123,99 @@ window.radix = (function () {
     };
   })();
 
-  // ---- fake entity store — plan.md Phase 2 (hand-written, in-memory) -------
-  // Seeded + reset()-able. Persistence (IndexedDB) is deferred to Phase 1/2;
-  // reset() stays in the surface because reset-to-seed is a contract concern.
+  // ---- fake entity store — plan.md Phase 2 (hand-written) ------------------
+  // The in-memory working set is the synchronous source of truth — the contract
+  // is synchronous (query/create return, subscribe fires, immediately). IndexedDB
+  // sits underneath as persistence: the store hydrates from it on load and writes
+  // through on every mutation, so toggles/adds/deletes survive a reload. reset()
+  // wipes persisted state back to the seed (still a contract concern). If
+  // IndexedDB is unavailable (iframe lacking allow-same-origin, private mode, …)
+  // the store silently degrades to memory-only — the spike's old behaviour.
   var db = (function () {
+    // IndexedDB adapter: one database per prototype (namespaced by URL path so
+    // prototypes that share the storage origin don't collide), one object store
+    // keyed by collection name (value = array of rows) plus a meta store holding
+    // the id counter.
+    var idb = (function () {
+      var NAME = 'radix-store::' +
+        ((typeof location !== 'undefined' && location.pathname) || '/');
+      var COLLS = 'collections';
+      var META = 'meta';
+      var opening = null;
+      function available() {
+        try { return typeof indexedDB !== 'undefined' && indexedDB !== null; }
+        catch (e) { return false; }
+      }
+      function open() {
+        if (opening) { return opening; }
+        opening = new Promise(function (resolve, reject) {
+          var req;
+          try { req = indexedDB.open(NAME, 1); } catch (e) { reject(e); return; }
+          req.onupgradeneeded = function () {
+            var d = req.result;
+            if (!d.objectStoreNames.contains(COLLS)) { d.createObjectStore(COLLS); }
+            if (!d.objectStoreNames.contains(META)) { d.createObjectStore(META); }
+          };
+          req.onsuccess = function () { resolve(req.result); };
+          req.onerror = function () { reject(req.error); };
+        });
+        return opening;
+      }
+      return {
+        available: available,
+        loadAll: function () {
+          return open().then(function (d) {
+            return new Promise(function (resolve, reject) {
+              var tx = d.transaction([COLLS, META], 'readonly');
+              var cs = tx.objectStore(COLLS);
+              var out = { collections: {}, idn: null };
+              var ksReq = cs.getAllKeys();
+              var vsReq = cs.getAll();
+              vsReq.onsuccess = function () {
+                var ks = ksReq.result || [], vs = vsReq.result || [];
+                for (var i = 0; i < ks.length; i++) { out.collections[ks[i]] = vs[i]; }
+              };
+              var idReq = tx.objectStore(META).get('idn');
+              idReq.onsuccess = function () {
+                if (typeof idReq.result === 'number') { out.idn = idReq.result; }
+              };
+              tx.oncomplete = function () { resolve(out); };
+              tx.onerror = function () { reject(tx.error); };
+            });
+          });
+        },
+        save: function (name, rows, nextId) {
+          return open().then(function (d) {
+            return new Promise(function (resolve, reject) {
+              var tx = d.transaction([COLLS, META], 'readwrite');
+              tx.objectStore(COLLS).put(rows, name);
+              if (typeof nextId === 'number') { tx.objectStore(META).put(nextId, 'idn'); }
+              tx.oncomplete = function () { resolve(); };
+              tx.onerror = function () { reject(tx.error); };
+            });
+          });
+        },
+        clear: function () {
+          return open().then(function (d) {
+            return new Promise(function (resolve, reject) {
+              var tx = d.transaction([COLLS, META], 'readwrite');
+              tx.objectStore(COLLS).clear();
+              tx.objectStore(META).clear();
+              tx.oncomplete = function () { resolve(); };
+              tx.onerror = function () { reject(tx.error); };
+            });
+          });
+        }
+      };
+    })();
+
     var seedFn = null;
     var store = {};
     var subs = {};
     var idn = 1;
+    var persistOn = false;   // IndexedDB confirmed usable (set once hydrate runs)
+    var suspend = false;     // batch guard: skip write-through during seed/reset
+    var touched = false;     // a real (non-seed) mutation happened — see hydrate
     function genId() { return 'e' + (idn++); }
     function rows(c) {
       var m = store[c] || {};
@@ -145,12 +231,21 @@ window.radix = (function () {
       for (var k in where) { if (row[k] !== where[k]) { return false; } }
       return true;
     }
+    function persist(c) {
+      if (!persistOn || suspend) { return; }
+      try { idb.save(c, rows(c), idn).catch(function () {}); } catch (e) {}
+    }
+    function persistAll() {
+      if (!persistOn) { return; }
+      for (var c in store) { persist(c); }
+    }
     var api = {
       create: function (c, data) {
         var id = (data && data.id) ? data.id : genId();
         var ent = Object.assign({}, data, { id: id });
         (store[c] || (store[c] = {}))[id] = ent;
-        notify(c);
+        if (!suspend) { touched = true; }
+        notify(c); persist(c);
         return ent;
       },
       update: function (c, id, patch) {
@@ -158,11 +253,13 @@ window.radix = (function () {
         var cur = m[id] || { id: id };
         var ent = Object.assign({}, cur, patch, { id: id });
         m[id] = ent;
-        notify(c);
+        if (!suspend) { touched = true; }
+        notify(c); persist(c);
         return ent;
       },
       delete: function (c, id) {
-        var m = store[c]; if (m) { delete m[id]; notify(c); }
+        var m = store[c];
+        if (m) { delete m[id]; if (!suspend) { touched = true; } notify(c); persist(c); }
       },
       get: function (c, id) { var m = store[c]; return m ? m[id] : undefined; },
       query: function (c, args) {
@@ -188,14 +285,54 @@ window.radix = (function () {
         };
       },
       reset: function () {
+        touched = true;            // a reset must not be clobbered by hydrate
+        suspend = true;
         store = {}; idn = 1;
         if (seedFn) { seedFn(api); }
+        suspend = false;
         for (var c in subs) { notify(c); }
+        if (persistOn) {
+          try { idb.clear().then(persistAll).catch(function () {}); } catch (e) {}
+        }
       },
-      // Spike-only: register a seed fn and run it once now. Not part of the
-      // prototype-facing contract — it is how an app installs its starter data.
-      __seed: function (fn) { seedFn = fn; if (seedFn) { seedFn(api); } }
+      // Spike-only: register a seed fn and run it once now (synchronously, so the
+      // first render has data). Not part of the prototype-facing contract — it is
+      // how an app installs its starter data. Persistence is decided by hydrate():
+      // any persisted rows win over this seed.
+      __seed: function (fn) {
+        seedFn = fn;
+        suspend = true;
+        if (seedFn) { seedFn(api); }
+        suspend = false;
+      }
     };
+    // Hydrate from IndexedDB once, asynchronously. Runs in parallel with the
+    // synchronous seed above; this callback reconciles the two: if persisted rows
+    // exist and the user hasn't mutated yet, they replace the seed; otherwise we
+    // persist whatever is currently in memory (first run, or post-mutation).
+    (function hydrate() {
+      if (!idb.available()) { return; }
+      idb.loadAll().then(function (data) {
+        persistOn = true;
+        var colls = data.collections || {};
+        var keys = Object.keys(colls);
+        var hasPersisted = keys.some(function (k) { return colls[k] && colls[k].length; });
+        if (hasPersisted && !touched) {
+          store = {};
+          keys.forEach(function (k) {
+            var arr = colls[k] || [], m = store[k] = {};
+            arr.forEach(function (r) { if (r && r.id != null) { m[r.id] = r; } });
+          });
+          if (typeof data.idn === 'number') { idn = data.idn; }
+          var seen = {};
+          keys.concat(Object.keys(subs)).forEach(function (c) {
+            if (!seen[c]) { seen[c] = 1; notify(c); }
+          });
+        } else {
+          persistAll();
+        }
+      }).catch(function () { persistOn = false; });
+    })();
     return api;
   })();
 

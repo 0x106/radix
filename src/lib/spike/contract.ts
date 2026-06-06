@@ -32,9 +32,9 @@ export interface QueryArgs {
 
 /**
  * The schema-driven entity store (plan.md Phase 2). For the spike it is a single
- * hand-written, in-memory, seeded store — NOT the generic engine. `reset()` wipes
- * back to the seed (the determinism / reset-replay concern, notes.md §9), kept in
- * the surface even though persistence (IndexedDB) is deferred.
+ * hand-written, seeded store: a synchronous in-memory working set persisted
+ * through to IndexedDB so state survives reloads. `reset()` wipes back to the
+ * seed (the determinism / reset-replay concern, notes.md §9).
  */
 export interface Db {
   /** Insert a row into `collection`; returns the created entity (id auto-filled). */
