@@ -20,7 +20,7 @@ The admin app also does free-text search and a status count in JavaScript rather
 
 **Shop** is the most interesting case. It has three collections that reference each other by id (products, orders, orderItems), and the admin view reassembles an order by querying `orderItems` where `orderId` matches, then calling `db.get` for each product. That's a hand-rolled join, and it works, but it does two things the store currently can't help with:
 
-1. **The join itself.** Fetching order lines means one `db.query` on `orderItems` filtered by `orderId`, then N `db.get` calls for products. This is readable code but it's also the thing a `db.query('orderItems', { include: { product: 'productId' } })` call would collapse into one operation. Whether thˆat's worth adding depends on how frequently apps need it.
+1. **The join itself.** Fetching order lines means one `db.query` on `orderItems` filtered by `orderId`, then N `db.get` calls for products. This is readable code but it's also the thing a `db.query('orderItems', { include: { product: 'productId' } })` call would collapse into one operation. Whether that's worth adding depends on how frequently apps need it.
 
 2. **Multi-collection writes without atomicity.** Placing an order writes an order row, N orderItem rows, and decrements N product stock values as separate calls. Each fires its own subscriber notification. If one call threw mid-way, the store would be inconsistent. In practice this won't happen (it's local, synchronous, in-memory — nothing can "fail" between two `db.create` calls), but the pattern is still fragile to reason about. A `db.batch` wrapper would also clean this up.
 
