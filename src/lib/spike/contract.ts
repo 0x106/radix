@@ -24,10 +24,16 @@ export type Where = Record<string, unknown>;
 /** Ordering for `db.query`. One field, asc/desc — matches what the apps needed. */
 export type Order = { field: string; dir: "asc" | "desc" };
 
+/** One inline relation to resolve. `from` is the collection; `on` is the FK field on the queried row. */
+export type IncludeSpec = { from: string; on: string };
+/** Map of embedded-property-name → relation spec, passed as `args.include` to `db.query`. */
+export type Include = Record<string, IncludeSpec>;
+
 export interface QueryArgs {
   where?: Where;
   order?: Order;
   limit?: number;
+  include?: Include;
 }
 
 /**

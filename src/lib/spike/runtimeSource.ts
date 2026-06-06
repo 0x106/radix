@@ -274,6 +274,17 @@ window.radix = (function () {
           });
         }
         if (typeof args.limit === 'number') { out = out.slice(0, args.limit); }
+        if (args.include) {
+          out = out.map(function (r) {
+            var ext = Object.assign({}, r);
+            for (var key in args.include) {
+              var rel = args.include[key];
+              var col = store[rel.from] || {};
+              ext[key] = col[r[rel.on]];
+            }
+            return ext;
+          });
+        }
         return out;
       },
       subscribe: function (c, cb) {
