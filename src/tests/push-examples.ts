@@ -18,6 +18,9 @@ import { todo } from "./examples/todo";
 import { habits } from "./examples/habits";
 import { chat } from "./examples/chat";
 import { cron } from "./examples/cron";
+import { admin } from "./examples/admin";
+import { finance } from "./examples/finance";
+import { shop } from "./examples/shop";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
@@ -28,6 +31,10 @@ const examples = [
   { ...habits, wrap: wrapPrototype },
   { ...chat, wrap: wrapPrototype },
   { ...cron, wrap: wrapPrototype },
+  // db-focused spikes: filtering/bulk writes, aggregation, relations/joins.
+  { ...admin, wrap: wrapPrototype },
+  { ...finance, wrap: wrapPrototype },
+  { ...shop, wrap: wrapPrototype },
 ];
 
 async function main() {

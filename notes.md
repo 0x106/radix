@@ -1,11 +1,11 @@
 # Radix
 
-Radix is a platform designed to let users and AI agents collaboratively build disposable, interactive software prototypes. To prevent the
-AI from starting from scratch every time, the platform provides a "pantry" of pre-built technical primitives. This includes UI "shells"
-for different surfaces (web, mobile, CLI, desktop) and a library of standardized mock services (auth, databases, payments) that operate
-entirely in-memory with fake delays and resetting states. By confining the prototype to a single language environment (like JavaScript)
-and strictly mocking all external dependencies, the agent can rapidly wire together functional-looking applications without getting
-bogged down by production infrastructure or edge cases.
+Radix is a platform designed to let users and AI agents collaboratively build interactive software prototypes. To prevent the
+AI from starting from scratch every time, the platform provides a library of pre-built technical primitives. This includes UI "shells"
+for different surfaces (web, mobile, CLI, desktop, native) and a library of standardized mock services (auth, databases, payments).
+By confining the prototype to a single language environment (like JavaScript) and strictly mocking all external dependencies, the
+agent can rapidly wire together functional (but constrained) applications without getting bogged down by production infrastructure
+or edge cases.
 
 Technically, the system is designed around an "extraction-based" architecture rather than a rigid, top-down specification. To preserve the
 AI's ability to improvise or "fudge" logic, the agent freely builds the mock application first. A lightweight extraction layer then reads
