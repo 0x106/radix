@@ -136,8 +136,24 @@ export interface Log {
 }
 
 /**
+ * Simulated external service stubs. Delays are clock-based so they honour
+ * pause/step/fastForward. Exposed as `window.radix.services` and on actor ctx.
+ */
+export interface Services {
+  email: {
+    send(opts: { to: string; subject: string; body?: string }): Promise<void>;
+  };
+  payment: {
+    charge(opts: { amount: number; description?: string }): Promise<{ transactionId: string; amount: number }>;
+  };
+  sms: {
+    send(opts: { to: string; message: string }): Promise<void>;
+  };
+}
+
+/**
  * Context object passed to every actor handler. Gives the handler access to its
- * own state plus the full runtime (db, events, clock, random, log).
+ * own state plus the full runtime (db, events, clock, random, log, services).
  */
 export interface ActorCtx {
   /** The actor's current internal state. Read-only reference — use `set` to mutate. */
@@ -149,6 +165,7 @@ export interface ActorCtx {
   random: Random;
   clock: Clock;
   log: Log;
+  services: Services;
 }
 
 /** A tick or start handler — receives ctx, may be async. */
@@ -196,6 +213,8 @@ export interface RadixRuntime {
   log: Log;
   /** Create a stateful, async-capable world actor. */
   actor(config: ActorConfig): Actor;
+  /** Simulated external service stubs. */
+  services: Services;
 }
 
 declare global {

@@ -375,6 +375,38 @@ window.radix = (function () {
     return fn;
   })();
 
+  // ---- external service stubs ---------------------------------------------
+  // Simulated external APIs (email, payment, SMS). Delays route through the
+  // simulated clock so they honour pause/step/fastForward. Exposed as
+  // window.radix.services and on actor ctx.
+  var services = (function () {
+    function simDelay(ms) {
+      return new Promise(function (resolve) { clock.setTimeout(resolve, ms); });
+    }
+    return {
+      email: {
+        send: function (opts) {
+          log.info('email to ' + opts.to + ': "' + opts.subject + '"');
+          return simDelay(300 + random.int(0, 300));
+        },
+      },
+      payment: {
+        charge: function (opts) {
+          return simDelay(500 + random.int(0, 300)).then(function () {
+            if (random.random() < 0.05) { throw new Error('card declined'); }
+            return { transactionId: 'txn-' + random.int(10000, 99999), amount: opts.amount };
+          });
+        },
+      },
+      sms: {
+        send: function (opts) {
+          log.info('sms to ' + opts.to + ': "' + opts.message + '"');
+          return simDelay(200 + random.int(0, 200));
+        },
+      },
+    };
+  })();
+
   // ---- world actor — stateful, async-capable, reactive world processes -----
   // Each actor has its own private state, access to the full runtime via a ctx
   // object, an optional timer-based tick, and optional reactive event handlers.
@@ -393,6 +425,7 @@ window.radix = (function () {
       random: random,
       clock: clock,
       log: log,
+      services: services,
     };
 
     function maybeAsync(result) {
@@ -455,6 +488,6 @@ window.radix = (function () {
     }
   });
 
-  return { db: db, events: events, clock: clock, random: random, log: log, actor: actor };
+  return { db: db, events: events, clock: clock, random: random, log: log, actor: actor, services: services };
 })();
 `;
