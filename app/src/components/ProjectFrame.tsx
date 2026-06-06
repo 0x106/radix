@@ -1,9 +1,13 @@
 "use client";
 
+import { forwardRef } from "react";
 import { Boxes } from "lucide-react";
 import type { Project } from "@/components/AppSidebar";
 
-export function ProjectFrame({ project }: { project: Project | null }) {
+export const ProjectFrame = forwardRef<
+  HTMLIFrameElement,
+  { project: Project | null }
+>(function ProjectFrame({ project }, ref) {
   if (!project) {
     return (
       <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 bg-muted/30 text-center">
@@ -34,6 +38,7 @@ export function ProjectFrame({ project }: { project: Project | null }) {
 
   return (
     <iframe
+      ref={ref}
       // key forces a fresh frame (clean scope) when switching projects.
       key={project.id}
       src={url}
@@ -46,4 +51,4 @@ export function ProjectFrame({ project }: { project: Project | null }) {
       className="h-full w-full flex-1 border-0 bg-white"
     />
   );
-}
+});

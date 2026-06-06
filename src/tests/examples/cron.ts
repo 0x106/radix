@@ -1,82 +1,91 @@
-// PHASE 0 EXAMPLE — headless prototype: a cron worker with no real UI.
+// Headless prototype: a cron scheduler.
 //
-// Purpose: exercise the *clock-advanced, headless* corner (notes.md §4) — there
-// is no app to click, so the only interface is a debug console. It drives the
-// simulated `clock` (play / pause / step / fast-forward), reads the `log`, and
-// inspects `db` state. This is the deliberate embryo of the Phase 4 simulation
-// console: the worker itself does nothing visible; the cockpit is the whole UI.
+// Each job runs on its own repeating schedule via a separate actor. The UI is
+// purely a debug console — there's nothing to click on the "app" side, so the
+// simulation clock controls are the whole interface. Advancing simulated time
+// is the only way to make jobs fire.
 //
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
 export const cron = {
-  name: "Cron worker (headless example)",
+  name: "Cron scheduler (headless example)",
   description:
-    "Phase 0 example: a headless cron worker driven by the simulated clock — debug console only (no app UI).",
+    "Headless cron scheduler: five jobs on independent repeating schedules, driven entirely by the simulated clock.",
   source: /* js */ `
     const { useState, useEffect } = React;
     const h = React.createElement;
     const R = window.radix;
     const db = R.db, clock = R.clock, log = R.log;
 
-    const INTERVAL = 5000; // run the job every 5s of simulated time
+    // Each job has a label, an interval (simulated ms), and a simulated run
+    // duration. In a real cron these would be expressed as cron strings; here
+    // we just use milliseconds of sim time to keep it tangible.
+    const JOB_DEFS = [
+      { id: 'expire-sessions',  label: 'Expire sessions',       everyMs:  10000, durationMs: 200 },
+      { id: 'resize-avatars',   label: 'Resize avatars',        everyMs:  15000, durationMs: 600 },
+      { id: 'rotate-logs',      label: 'Rotate logs',           everyMs:  20000, durationMs: 300 },
+      { id: 'send-digests',     label: 'Send digest emails',    everyMs:  30000, durationMs: 1200 },
+      { id: 'rebuild-search',   label: 'Rebuild search index',  everyMs:  45000, durationMs: 2000 },
+    ];
 
     db.__seed(function (api) {
-      ['resize avatars', 'send digest emails', 'rotate logs', 'rebuild search index', 'expire sessions']
-        .forEach(function (label, i) { api.create('queue', { label: label, status: 'pending', seq: i }); });
-      log.info('worker booted — ' + 5 + ' jobs queued (clock is paused; press Play or Step)');
+      JOB_DEFS.forEach(function (j) {
+        api.create('jobs', { id: j.id, label: j.label, everyMs: j.everyMs,
+          status: 'idle', runs: 0, lastRanAt: null });
+      });
+      log.info('scheduler ready — ' + JOB_DEFS.length + ' jobs registered (clock paused; press Play or Step)');
     });
 
-    // The cron job: each tick, take the oldest pending item and process it.
-    function tick() {
-      const pending = db.query('queue', { where: { status: 'pending' }, order: { field: 'seq', dir: 'asc' }, limit: 1 });
-      if (pending.length === 0) {
-        log.debug('tick — idle, nothing to process');
-      } else {
-        const job = pending[0];
-        db.update('queue', job.id, { status: 'running' });
-        log.info('processing job', job.label);
-        // Simulated work takes ~800ms of sim time, then completes.
-        clock.setTimeout(function () {
-          db.update('queue', job.id, { status: 'done' });
-          log.info('completed job', job.label);
-        }, 800);
-      }
-      clock.setTimeout(tick, INTERVAL);
-    }
+    // One actor per job. Each fires on its own schedule and records runs in db.
+    const jobActors = JOB_DEFS.map(function (def) {
+      return R.actor({
+        everyMs: def.everyMs,
+        tick: async function (ctx) {
+          const job = ctx.db.get('jobs', def.id);
+          if (!job || job.status === 'running') return; // skip if already in flight
+          ctx.db.update('jobs', def.id, { status: 'running', lastRanAt: ctx.clock.now() });
+          ctx.log.info('started', def.label);
+          ctx.clock.setTimeout(function () {
+            const current = ctx.db.get('jobs', def.id);
+            const runs = current ? current.runs + 1 : 1;
+            ctx.db.update('jobs', def.id, { status: 'idle', runs: runs });
+            ctx.log.info('finished', def.label + ' (run #' + runs + ')');
+          }, def.durationMs);
+        },
+      });
+    });
 
+    function useJobs() {
+      const read = function () { return db.query('jobs', { order: { field: 'everyMs', dir: 'asc' } }); };
+      const [rows, setRows] = useState(read);
+      useEffect(function () { return db.subscribe('jobs', function () { setRows(read()); }); }, []);
+      return rows;
+    }
     function useLog() {
       const [entries, setEntries] = useState(log.entries());
       useEffect(function () { return log.subscribe(setEntries); }, []);
       return entries;
     }
-    function useQueue() {
-      const read = function () { return db.query('queue', { order: { field: 'seq', dir: 'asc' } }); };
-      const [rows, setRows] = useState(read);
-      useEffect(function () { return db.subscribe('queue', function () { setRows(read()); }); }, []);
-      return rows;
-    }
     function useClock() {
       const [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (now, running) { setS({ now: now, running: running }); }); }, []);
+      useEffect(function () { return clock.subscribe(function (now, running) { setS({ now, running }); }); }, []);
       return s;
     }
 
     const LEVEL_COLOR = { debug: '#9ca3af', info: '#2563eb', warn: '#b45309', error: '#b91c1c' };
-    const STATUS_COLOR = { pending: '#6b7280', running: '#b45309', done: '#15803d' };
+    const STATUS_DOT = { idle: '#9ca3af', running: '#b45309' };
 
     function Console() {
+      const jobs = useJobs();
       const entries = useLog();
-      const queue = useQueue();
       const cs = useClock();
 
       useEffect(function () {
-        // Kick off the first scheduled tick (fires only as the clock advances).
-        const cancel = clock.setTimeout(tick, INTERVAL);
-        return function () { cancel(); };
+        jobActors.forEach(function (a) { a.start(); });
+        return function () { jobActors.forEach(function (a) { a.stop(); }); };
       }, []);
 
       const sec = (cs.now / 1000).toFixed(1);
-      const counts = queue.reduce(function (acc, j) { acc[j.status] = (acc[j.status] || 0) + 1; return acc; }, {});
 
       const wrap = { display: 'flex', flexDirection: 'column', height: '100vh',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#111', background: '#fff' };
@@ -92,7 +101,7 @@ export const cron = {
 
       return h('div', { style: wrap },
         h('div', { style: head },
-          h('strong', null, 'cron-worker'),
+          h('strong', null, 'cron-scheduler'),
           h('span', { style: tag }, 'headless'),
           h('span', { style: { color: '#6b7280' } }, 'sim t=' + sec + 's'),
           h('span', { style: { color: cs.running ? '#15803d' : '#b45309' } }, cs.running ? '● running' : '⏸ paused'),
@@ -105,10 +114,9 @@ export const cron = {
           ),
         ),
         h('div', { style: body },
-          // --- event log ---
           h('div', { style: logPane },
             h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'event log'),
-            entries.map(function (e, i) {
+            entries.slice().reverse().map(function (e, i) {
               return h('div', { key: i, style: logRow },
                 h('span', { style: { color: '#9ca3af', minWidth: 56 } }, (e.t / 1000).toFixed(1) + 's'),
                 h('span', { style: { color: LEVEL_COLOR[e.level], minWidth: 44, textTransform: 'uppercase' } }, e.level),
@@ -116,17 +124,23 @@ export const cron = {
               );
             }),
           ),
-          // --- state inspector ---
           h('div', { style: statePane },
-            h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'state · queue'),
-            h('div', { style: { fontSize: 12, color: '#6b7280', marginBottom: 10 } },
-              ['pending', 'running', 'done'].map(function (s) {
-                return h('span', { key: s, style: { marginRight: 12 } }, s + ': ' + (counts[s] || 0));
-              })),
-            queue.map(function (j) {
-              return h('div', { key: j.id, style: { display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '3px 0' } },
-                h('span', null, j.label),
-                h('span', { style: { color: STATUS_COLOR[j.status] } }, j.status),
+            h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'jobs'),
+            jobs.map(function (j) {
+              const every = j.everyMs >= 60000
+                ? (j.everyMs / 60000).toFixed(0) + 'm'
+                : (j.everyMs / 1000).toFixed(0) + 's';
+              const lastRan = j.lastRanAt !== null
+                ? (j.lastRanAt / 1000).toFixed(1) + 's'
+                : 'never';
+              return h('div', { key: j.id, style: { padding: '6px 0', borderBottom: '1px solid #f5f5f5' } },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12.5 } },
+                  h('span', { style: { fontWeight: 500 } }, j.label),
+                  h('span', { style: { color: STATUS_DOT[j.status] } },
+                    j.status === 'running' ? '● running' : 'idle'),
+                ),
+                h('div', { style: { fontSize: 11, color: '#9ca3af', marginTop: 2 } },
+                  'every ' + every + '  ·  runs: ' + j.runs + '  ·  last: ' + lastRan),
               );
             }),
           ),

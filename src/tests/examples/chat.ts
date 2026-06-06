@@ -31,13 +31,18 @@ export const chat = {
       db.create('messages', { from: from, text: text, t: clock.now(), seq: seq++ });
     }
 
-    // The "other person": a seeded, clock-driven actor publishing onto a topic.
-    const other = R.spawn({
-      topic: 'chat:incoming',
+    // The "other person": a stateful actor that works through a script line by line.
+    const other = R.actor({
+      state: { index: 0 },
       everyMs: 2500,
       jitterMs: 1200,
-      count: LINES.length,
-      produce: function (n) { return LINES[n]; },
+      tick: async function (ctx) {
+        if (ctx.state.index >= LINES.length) return;
+        const line = LINES[ctx.state.index];
+        ctx.set({ index: ctx.state.index + 1 });
+        events.publish('chat:incoming', line);
+        log.info('incoming', line);
+      },
     });
 
     function useMessages() {
@@ -63,7 +68,6 @@ export const chat = {
       useEffect(function () {
         const off = events.subscribe('chat:incoming', function (line) {
           addMessage('them', line);
-          log.info('incoming message', line);
         });
         other.start();
         clock.play();

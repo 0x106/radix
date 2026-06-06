@@ -315,6 +315,11 @@ window.radix = (function () {
         suspend = true;
         if (seedFn) { seedFn(api); }
         suspend = false;
+      },
+      dump: function () {
+        var out = {};
+        for (var c in store) { out[c] = rows(c); }
+        return out;
       }
     };
     // Hydrate from IndexedDB once, asynchronously. Runs in parallel with the
@@ -370,32 +375,86 @@ window.radix = (function () {
     return fn;
   })();
 
-  // ---- actor primitive — plan.md Phase 3 / notes.md §12 -------------------
-  // A seeded, clock-driven process that publishes onto a topic over time. This
-  // is the hand-written precursor to "one configurable simulator engine".
-  function spawn(config) {
-    var running = false, n = 0, cancel = null;
-    function schedule() {
-      if (!running) { return; }
-      if (typeof config.count === 'number' && n >= config.count) { running = false; return; }
+  // ---- world actor — stateful, async-capable, reactive world processes -----
+  // Each actor has its own private state, access to the full runtime via a ctx
+  // object, an optional timer-based tick, and optional reactive event handlers.
+  // Handlers may be sync or async — the runtime duck-types the return value.
+  function actor(config) {
+    var state = Object.assign({}, config.state || {});
+    var running = false;
+    var tickCancel = null;
+    var unsubs = [];
+
+    var ctx = {
+      get state() { return state; },
+      set: function (patch) { state = Object.assign({}, state, patch); },
+      db: db,
+      events: events,
+      random: random,
+      clock: clock,
+      log: log,
+    };
+
+    function maybeAsync(result) {
+      return (result && typeof result.then === 'function') ? result : Promise.resolve(result);
+    }
+
+    function scheduleTick() {
+      if (!running || !config.tick) { return; }
       var base = config.everyMs || 1000;
       var jitter = config.jitterMs ? random.int(-config.jitterMs, config.jitterMs) : 0;
       var delay = Math.max(0, base + jitter);
-      cancel = clock.setTimeout(function () {
+      tickCancel = clock.setTimeout(function () {
         if (!running) { return; }
-        var payload = config.produce ? config.produce(n) : null;
-        n++;
-        events.publish(config.topic, payload);
-        schedule();
+        maybeAsync(config.tick(ctx))
+          .catch(function (e) { log.error('actor tick error', e && e.message); })
+          .then(function () { scheduleTick(); });
       }, delay);
     }
+
     return {
-      start: function () { if (running) { return; } running = true; schedule(); },
-      stop: function () { running = false; if (cancel) { cancel(); } },
+      start: function () {
+        if (running) { return; }
+        running = true;
+        if (config.on) {
+          Object.keys(config.on).forEach(function (topic) {
+            var handler = config.on[topic];
+            unsubs.push(events.subscribe(topic, function (payload) {
+              if (!running) { return; }
+              maybeAsync(handler(payload, ctx))
+                .catch(function (e) { log.error('actor event error', e && e.message); });
+            }));
+          });
+        }
+        if (config.start) {
+          maybeAsync(config.start(ctx))
+            .catch(function (e) { log.error('actor start error', e && e.message); });
+        }
+        scheduleTick();
+      },
+      stop: function () {
+        running = false;
+        if (tickCancel) { tickCancel(); tickCancel = null; }
+        unsubs.forEach(function (u) { u(); });
+        unsubs = [];
+      },
       isRunning: function () { return running; }
     };
   }
 
-  return { db: db, events: events, clock: clock, random: random, log: log, spawn: spawn };
+  // ---- shell message bridge -----------------------------------------------
+  // Allows the Radix app shell to inspect and control the prototype db from
+  // outside the iframe via postMessage (cross-origin direct access is blocked).
+  window.addEventListener('message', function (e) {
+    if (!e.data || typeof e.data !== 'object') { return; }
+    if (e.data.type === 'radix:dump') {
+      window.parent.postMessage({ type: 'radix:dump:response', data: db.dump() }, '*');
+    } else if (e.data.type === 'radix:reset') {
+      db.reset();
+      window.parent.postMessage({ type: 'radix:reset:done', data: db.dump() }, '*');
+    }
+  });
+
+  return { db: db, events: events, clock: clock, random: random, log: log, actor: actor };
 })();
 `;

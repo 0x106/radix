@@ -21,6 +21,7 @@ import { cron } from "./examples/cron";
 import { admin } from "./examples/admin";
 import { finance } from "./examples/finance";
 import { shop } from "./examples/shop";
+import { smarthome } from "./examples/smarthome";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
@@ -35,6 +36,8 @@ const examples = [
   { ...admin, wrap: wrapPrototype },
   { ...finance, wrap: wrapPrototype },
   { ...shop, wrap: wrapPrototype },
+  // world engine examples: multiple concurrent actors, reactive + timer-based.
+  { ...smarthome, wrap: wrapPrototype },
 ];
 
 async function main() {

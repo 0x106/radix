@@ -57,6 +57,8 @@ export interface Db {
   subscribe(collection: string, cb: (rows: Entity[]) => void): () => void;
   /** Wipe all collections back to the seed (reset-to-seed). */
   reset(): void;
+  /** Return all collections and their rows — for inspection and debugging. */
+  dump(): Record<string, Entity[]>;
 }
 
 /** Unsubscribe handle returned by subscription calls. */
@@ -134,35 +136,56 @@ export interface Log {
 }
 
 /**
- * A simulated actor / world-process (plan.md Phase 3, notes.md §3/§12): a seeded,
- * clock-driven process that publishes events over time. Configured per app (a
- * chat "other person", a cron tick). This is the hand-written precursor to the
- * one configurable simulator engine.
+ * Context object passed to every actor handler. Gives the handler access to its
+ * own state plus the full runtime (db, events, clock, random, log).
+ */
+export interface ActorCtx {
+  /** The actor's current internal state. Read-only reference — use `set` to mutate. */
+  readonly state: Record<string, unknown>;
+  /** Shallow-merge `patch` into the actor's state. */
+  set(patch: Record<string, unknown>): void;
+  db: Db;
+  events: Events;
+  random: Random;
+  clock: Clock;
+  log: Log;
+}
+
+/** A tick or start handler — receives ctx, may be async. */
+export type TickHandler = (ctx: ActorCtx) => void | Promise<void>;
+/** A reactive event handler — receives the event payload and ctx, may be async. */
+export type EventHandler = (payload: unknown, ctx: ActorCtx) => void | Promise<void>;
+
+/**
+ * Configuration for a world actor. Any combination of timer-based (`tick`) and
+ * reactive (`on`) behaviour is valid; both are optional.
  */
 export interface ActorConfig {
-  /** Topic the actor publishes onto. */
-  topic: string;
-  /** Base delay between emissions, in simulated ms. */
-  everyMs: number;
-  /** Random +/- jitter applied to each delay (simulated ms). Seeded. */
+  /** Initial internal state for this actor. */
+  state?: Record<string, unknown>;
+  /** Called once when `start()` is invoked. May be async. */
+  start?: TickHandler;
+  /** Called on each timer tick. May be async; the next tick is not scheduled until it resolves. */
+  tick?: TickHandler;
+  /** Base interval between ticks in simulated ms. */
+  everyMs?: number;
+  /** Random ± jitter added to each interval (simulated ms). */
   jitterMs?: number;
-  /** Produce the next payload to publish. `n` is the emission index. */
-  produce: (n: number) => unknown;
-  /** Stop after this many emissions (default: unbounded). */
-  count?: number;
+  /** Map of event topic → handler. Wired to the event bus on start, torn down on stop. */
+  on?: Record<string, EventHandler>;
 }
 
 export interface Actor {
-  /** Begin emitting on the clock. */
+  /** Begin ticking and wiring event handlers. */
   start(): void;
-  /** Stop emitting. */
+  /** Stop ticking and remove all event subscriptions. */
   stop(): void;
-  /** Whether it is currently running. */
+  /** Whether the actor is currently running. */
   isRunning(): boolean;
 }
 
 /**
- * Everything a Radix prototype can reach outside itself, for the Phase 0 example.
+ * Everything a Radix prototype can reach outside itself.
  * Exposed in the iframe as `window.radix`.
  */
 export interface RadixRuntime {
@@ -171,8 +194,8 @@ export interface RadixRuntime {
   clock: Clock;
   random: Random;
   log: Log;
-  /** Spawn a seeded, clock-driven world actor. */
-  spawn(config: ActorConfig): Actor;
+  /** Create a stateful, async-capable world actor. */
+  actor(config: ActorConfig): Actor;
 }
 
 declare global {
