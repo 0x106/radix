@@ -1,4 +1,4 @@
-// PHASE 0 SPIKE — read-heavy analytics: a personal finance dashboard.
+// PHASE 0 EXAMPLE — read-heavy analytics: a personal finance dashboard.
 //
 // Purpose: stress the *query/aggregation* side of the fake `db` (example-apps.md
 // #3). Almost no writes — the point is a rich seeded dataset and lots of derived,
@@ -12,9 +12,9 @@
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
 export const finance = {
-  name: "Finance dashboard (analytics spike)",
+  name: "Finance dashboard (analytics example)",
   description:
-    "Phase 0 spike: read-heavy analytics over a seeded transactions set — balances and roll-ups computed on the client.",
+    "Phase 0 example: read-heavy analytics over a seeded transactions set — balances and roll-ups computed on the client.",
   source: /* js */ `
     const { useState, useEffect, useMemo } = React;
     const h = React.createElement;

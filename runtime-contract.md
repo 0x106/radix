@@ -1,23 +1,23 @@
 # Radix — Runtime contract (Phase 0 findings)
 
-> Loose, living notes from the Phase 0 spike (`plan.md` Phase 0). We hand-built
+> Loose, living notes from the Phase 0 examples (`plan.md` Phase 0). We hand-built
 > three prototypes directly against a throwaway runtime shim to discover the real
 > interface between **prototype code** and **the library of fakes**. This file
 > records what that interface wants to be. It is the input to Phase 1, where the
 > runtime gets frozen, documented, and versioned — **not** a frozen spec itself.
 >
-> Companion files: the typed surface lives in `src/lib/spike/contract.ts`; the
-> throwaway implementation in `src/lib/spike/runtimeSource.ts`; the three apps in
-> `src/tests/examples/{habits,chat,cron}.ts`. All of `src/lib/spike/` is expected
+> Companion files: the typed surface lives in `src/lib/contract.ts`; the
+> throwaway implementation in `src/lib/runtimeSource.ts`; the three apps in
+> `src/tests/examples/{habits,chat,cron}.ts`. All of `src/lib/` is expected
 > to be rewritten in Phase 1 — its job was to make this contract visible.
 
 ## What we built
 
-| Prototype | Spine (`notes.md` §4) | Handles exercised |
-|-----------|----------------------|-------------------|
-| **Habits** | CRUD-schema | `db` (create/update/delete/get/query/subscribe/reset), `log` |
-| **Chat** | Reactive-handler | `events`, `spawn` (actor), `clock`, `random`, `db`, `log` |
-| **Cron worker** | Reactive + clock-advanced, **headless** | `clock` (step/fast-forward), `log`, `db` |
+| Prototype       | Spine (`notes.md` §4)                   | Handles exercised                                            |
+| --------------- | --------------------------------------- | ------------------------------------------------------------ |
+| **Habits**      | CRUD-schema                             | `db` (create/update/delete/get/query/subscribe/reset), `log` |
+| **Chat**        | Reactive-handler                        | `events`, `spawn` (actor), `clock`, `random`, `db`, `log`    |
+| **Cron worker** | Reactive + clock-advanced, **headless** | `clock` (step/fast-forward), `log`, `db`                     |
 
 All three reach the library through a single global, `window.radix`, injected by
 `wrapPrototype` before the component runs — the same mechanism `wrapReactApp`
@@ -27,7 +27,7 @@ shape for Phase 1 too (until the real harness moves to a postMessage bridge).
 ## The surface that emerged
 
 Prototypes touch the library through these handles. (Only a subset of the
-eventual ~12 from `notes.md` §5 — that's the point of a spike.)
+eventual ~12 from `notes.md` §5 — that's the point of an example.)
 
 ### `db` — the schema-driven store
 
@@ -52,13 +52,13 @@ What the apps actually needed, and what it tells us:
   (`notes.md` §6). When that breaks, it should break toward an `api` custom
   endpoint, not a fatter `query`.
 - **`reset()` belongs on `db`** even though our store is in-memory. Habits' "Reset
-  to seed" button and the determinism story both lean on it. The *seed itself*
-  needs a home: in the spike we used a non-contract `db.__seed(fn)` that the app
+  to seed" button and the determinism story both lean on it. The _seed itself_
+  needs a home: in the example we used a non-contract `db.__seed(fn)` that the app
   calls at module load and that re-runs on `reset()`. Phase 1 should give seeding
   a real, first-class slot (probably manifest-driven, not an app call).
 - **No relations were exercised.** All three apps used flat collections. Relations
   (`belongsTo`/`hasMany` from `notes.md` §6) are still unproven against real app
-  code — worth a dedicated spike before the generic engine is designed.
+  code — worth a dedicated example before the generic engine is designed.
 
 ### `events` — the world-sim bus
 
@@ -85,14 +85,14 @@ clock.subscribe((now, running) => …) -> unsubscribe
 
 - **`clock.setTimeout` is the workhorse.** The cron job re-schedules itself with
   it; chat schedules replies with it; the actor primitive is built on it. Routing
-  *all* delayed work through the clock (never real `setTimeout`) is what makes
+  _all_ delayed work through the clock (never real `setTimeout`) is what makes
   pause/step/fast-forward actually control the app. Confirmed: this must be the
   only timer prototypes can reach.
 - **`clock.subscribe` was needed by every console-ish UI** (chat's time readout,
   cron's whole header). It wasn't in the original `notes.md` §5 sketch; add it.
 - **Real-time advance + manual step coexisting** worked well: "play" maps real ms
   to sim ms 1:1, while step/fast-forward jump instantly, firing everything due in
-  between. The headless cron worker is the proof — it is *only* drivable by these
+  between. The headless cron worker is the proof — it is _only_ drivable by these
   controls, which validates the Phase 4 console direction.
 
 ### `random` — seeded randomness
@@ -117,7 +117,7 @@ log.entries() -> LogEntry[]
 log.subscribe(cb) -> unsubscribe
 ```
 
-Every app logged; the cron console is *built* from `log.subscribe`. Stamping each
+Every app logged; the cron console is _built_ from `log.subscribe`. Stamping each
 entry with `clock.now()` (sim time, not wall time) was obviously right and made
 the cron log read like a real worker. Keep the sim-time stamp.
 
@@ -134,7 +134,7 @@ Phase 3). One seeded, clock-driven, self-rescheduling emitter covered the chat
 live under `events`, or is it a separate `sim`/`world` handle? How do multiple
 actors and stop-conditions compose? Only one actor was exercised here.
 
-## Open questions this spike touched (carried forward)
+## Open questions this example touched (carried forward)
 
 - **State machines & field-write-ownership (`notes.md` §6).** Both showed up
   concretely. Cron's `queue.status` (`pending → running → done`) is a state
@@ -147,7 +147,7 @@ actors and stop-conditions compose? Only one actor was exercised here.
   reload restarts from seed rather than resuming persisted-mid-flight state. The
   driver-teleport problem the plan describes can't appear until persistence
   (IndexedDB) lands. Re-test this the moment Phase 1/2 adds real persistence.
-- **Seeding's home.** `db.__seed` is a spike hack. Where seed data is declared,
+- **Seeding's home.** `db.__seed` is a example hack. Where seed data is declared,
   and how `reset()` re-applies it deterministically, needs a real design.
 
 ## Handles NOT exercised (deferred, with where they'd slot)
@@ -157,7 +157,7 @@ actors and stop-conditions compose? Only one actor was exercised here.
 - `services` — auth/payments/email/etc. No external service appeared. (Phase 5.)
 - `sensors` — streaming signal sources. No sensor app in this set. (Phase 6.)
 - `host` — the per-shell-variable handle (notifications, viewport, stdin/stdout).
-  Cron is morally "headless host = the console," but we faked the console *inside*
+  Cron is morally "headless host = the console," but we faked the console _inside_
   the prototype instead of via a `host`/shell boundary. This is the biggest gap
   vs. `notes.md` §5 and the trickiest part of the real contract (`notes.md` §13).
 - `storage` — key-value settings. Not needed; `db` sufficed.
@@ -166,10 +166,10 @@ actors and stop-conditions compose? Only one actor was exercised here.
 ## Bottom line for Phase 1
 
 The `db` / `events` / `clock` / `random` / `log` surface above held up under three
-genuinely different app shapes with almost no friction. The notable *additions*
+genuinely different app shapes with almost no friction. The notable _additions_
 over the original `notes.md` §5 sketch: `db.subscribe` and `clock.subscribe`
 (reactive reads), sim-time-stamped `log`, and a first-class seed mechanism. The
-notable *unresolved* items: the `host`/shell boundary (we sidestepped it), the
+notable _unresolved_ items: the `host`/shell boundary (we sidestepped it), the
 `Math.random()` blocking strategy, relations, and the persistence-dependent resume
-rule. Build the frozen Phase 1 runtime around this surface; spike `host` and
+rule. Build the frozen Phase 1 runtime around this surface; example `host` and
 relations next.

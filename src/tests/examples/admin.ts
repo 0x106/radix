@@ -1,4 +1,4 @@
-// PHASE 0 SPIKE — CRUD prototype: an internal admin dashboard.
+// PHASE 0 EXAMPLE — CRUD prototype: an internal admin dashboard.
 //
 // Purpose: stress the *query + write* breadth of the fake `db` (example-apps.md
 // #14). This is the unglamorous 60% of real software: a table over a collection
@@ -12,9 +12,9 @@
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
 export const admin = {
-  name: "Admin dashboard (CRUD spike)",
+  name: "Admin dashboard (CRUD example)",
   description:
-    "Phase 0 spike: an internal users table wired to the fake db — filter, sort, inline-edit, bulk actions, audit log.",
+    "Phase 0 example: an internal users table wired to the fake db — filter, sort, inline-edit, bulk actions, audit log.",
   source: /* js */ `
     const { useState, useEffect, useMemo } = React;
     const h = React.createElement;

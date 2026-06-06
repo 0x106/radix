@@ -1,4 +1,4 @@
-// PHASE 0 SPIKE — CRUD prototype: a habit tracker.
+// PHASE 0 EXAMPLE — CRUD prototype: a habit tracker.
 //
 // Purpose: exercise the `db` handle (create / update / delete / query /
 // subscribe / reset) end to end, with a real little UI on top, to discover what
@@ -9,9 +9,9 @@
 // scope (see wrapPrototype); the source assigns the component to `window.App`.
 
 export const habits = {
-  name: "Habits (CRUD spike)",
+  name: "Habits (CRUD example)",
   description:
-    "Phase 0 spike: a habit tracker wired to the fake db — add, toggle, delete, reset to seed.",
+    "Phase 0 example: a habit tracker wired to the fake db — add, toggle, delete, reset to seed.",
   source: /* js */ `
     const { useState, useEffect } = React;
     const h = React.createElement;

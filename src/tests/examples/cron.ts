@@ -1,4 +1,4 @@
-// PHASE 0 SPIKE — headless prototype: a cron worker with no real UI.
+// PHASE 0 EXAMPLE — headless prototype: a cron worker with no real UI.
 //
 // Purpose: exercise the *clock-advanced, headless* corner (notes.md §4) — there
 // is no app to click, so the only interface is a debug console. It drives the
@@ -9,9 +9,9 @@
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
 export const cron = {
-  name: "Cron worker (headless spike)",
+  name: "Cron worker (headless example)",
   description:
-    "Phase 0 spike: a headless cron worker driven by the simulated clock — debug console only (no app UI).",
+    "Phase 0 example: a headless cron worker driven by the simulated clock — debug console only (no app UI).",
   source: /* js */ `
     const { useState, useEffect } = React;
     const h = React.createElement;

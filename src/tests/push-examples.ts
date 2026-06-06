@@ -8,7 +8,7 @@
 //
 // Two kinds of examples:
 //   - Smoke tests (counter, todo): plain React, wrapped with wrapReactApp.
-//   - Phase 0 spikes (habits, chat, cron): exercise the window.radix runtime
+//   - Phase 0 examples (habits, chat, cron): exercise the window.radix runtime
 //     contract, wrapped with wrapPrototype (which installs the runtime shim).
 
 import { wrapReactApp, wrapPrototype } from "../lib/htmlTemplate";
@@ -24,14 +24,14 @@ import { shop } from "./examples/shop";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
-// `wrap` selects packaging: smoke tests get no runtime, spikes get window.radix.
+// `wrap` selects packaging: smoke tests get no runtime, examples get window.radix.
 const examples = [
   { ...counter, wrap: wrapReactApp },
   { ...todo, wrap: wrapReactApp },
   { ...habits, wrap: wrapPrototype },
   { ...chat, wrap: wrapPrototype },
   { ...cron, wrap: wrapPrototype },
-  // db-focused spikes: filtering/bulk writes, aggregation, relations/joins.
+  // db-focused examples: filtering/bulk writes, aggregation, relations/joins.
   { ...admin, wrap: wrapPrototype },
   { ...finance, wrap: wrapPrototype },
   { ...shop, wrap: wrapPrototype },

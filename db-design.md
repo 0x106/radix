@@ -1,12 +1,12 @@
 # The database question
 
-_A plain-language note on what this store needs to be, based on what the spike apps actually do._
+_A plain-language note on what this store needs to be, based on what the example apps actually do._
 
 ---
 
 ## What we actually have
 
-The current store is a keyed in-memory map (collection → id → row) with synchronous reads and writes, an equality-only `where` filter, one-field ordering, and IndexedDB persistence underneath. The spike apps were written against this surface on purpose — the goal was to find the edges, not to have a complete solution upfront.
+The current store is a keyed in-memory map (collection → id → row) with synchronous reads and writes, an equality-only `where` filter, one-field ordering, and IndexedDB persistence underneath. The example apps were written against this surface on purpose — the goal was to find the edges, not to have a complete solution upfront.
 
 ---
 
@@ -62,13 +62,13 @@ Given the constraints (local-only, single user, small datasets, model-authored a
 
 ## The realistic near-term additions
 
-In priority order, based on what the five spike apps actually ran into:
+In priority order, based on what the five example apps actually ran into:
 
 1. **`db.batch(fn)`** — run a function of mutations, defer all subscriber notifications until the end. Covers bulk actions (admin) and multi-collection writes (shop) without touching the query surface.
 
 2. **`include` on `db.query`** — optional inline relation resolution for the join case. One extra key in the query args, one extra resolution step in the implementation. Low complexity, high payoff for relational apps.
 
-3. **Nothing else right now.** The current surface is sufficient for every app in the 40-example set that's been spiked. The two additions above would cover the gaps the spikes found. Everything else (range queries, aggregation, GraphQL, schema language) would add complexity that isn't earning its keep yet.
+3. **Nothing else right now.** The current surface is sufficient for every app in the 40-example set. The two additions above would cover the gaps the examples found. Everything else (range queries, aggregation, GraphQL, schema language) would add complexity that isn't earning its keep yet.
 
 ---
 

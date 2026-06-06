@@ -1,15 +1,15 @@
-// Radix runtime contract — PHASE 0 SPIKE.
+// Radix runtime contract — PHASE 0 EXAMPLE.
 //
 // This file is the *typed half* of the spec we're discovering. It declares the
 // shape of `window.radix` — the handles a prototype uses to talk to "the library
 // of fakes" (notes.md §5). It is authored-time-only: the actual implementation
 // ships to the iframe as a browser-JS source string (see ./runtimeSource.ts),
 // so nothing here is imported at runtime. These types exist to (a) document the
-// surface precisely, (b) keep the three spike prototypes honest about what they
+// surface precisely, (b) keep the three example prototypes honest about what they
 // depend on, and (c) feed runtime-contract.md.
 //
 // THROWAWAY: the real, frozen runtime API is Phase 1. This is the dartboard, not
-// the dart. Only the handles the three spike apps actually exercise are modelled
+// the dart. Only the handles the three example apps actually exercise are modelled
 // — `db`, `events`, `clock`, `random`, `log`, plus the `actor` simulator
 // primitive. The rest of the eventual ~12 handles (`api`, `services`, `sensors`,
 // `host`, `storage`, `stub`) are deliberately absent; runtime-contract.md notes
@@ -18,7 +18,7 @@
 /** A stored entity. Every row carries a string `id`; the rest is app-defined. */
 export type Entity = { id: string } & Record<string, unknown>;
 
-/** Filter passed to `db.query`. Equality-only for the spike — see contract notes. */
+/** Filter passed to `db.query`. Equality-only for the example — see contract notes. */
 export type Where = Record<string, unknown>;
 
 /** Ordering for `db.query`. One field, asc/desc — matches what the apps needed. */
@@ -37,7 +37,7 @@ export interface QueryArgs {
 }
 
 /**
- * The schema-driven entity store (plan.md Phase 2). For the spike it is a single
+ * The schema-driven entity store (plan.md Phase 2). For the example it is a single
  * hand-written, seeded store: a synchronous in-memory working set persisted
  * through to IndexedDB so state survives reloads. `reset()` wipes back to the
  * seed (the determinism / reset-replay concern, notes.md §9).
@@ -162,7 +162,7 @@ export interface Actor {
 }
 
 /**
- * Everything a Radix prototype can reach outside itself, for the Phase 0 spike.
+ * Everything a Radix prototype can reach outside itself, for the Phase 0 example.
  * Exposed in the iframe as `window.radix`.
  */
 export interface RadixRuntime {

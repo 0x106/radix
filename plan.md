@@ -57,7 +57,7 @@ ephemeral state — it replays from the seed instead.
 
 ---
 
-## Phase 0 — Spike before committing
+## Phase 0 — Examples before committing
 
 Don't build the agent yet. Hand-build 2-3 prototypes directly against the runtime to discover
 the real contract between "prototype code" and "the library of fakes."

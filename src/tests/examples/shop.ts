@@ -1,4 +1,4 @@
-// PHASE 0 SPIKE — relational CRUD: an e-commerce storefront + admin.
+// PHASE 0 EXAMPLE — relational CRUD: an e-commerce storefront + admin.
 //
 // Purpose: exercise the *relational* side of the fake `db` (example-apps.md #6).
 // Three collections that reference each other by id — products, orders, and
@@ -11,9 +11,9 @@
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` in scope.
 
 export const shop = {
-  name: "Shop (relational spike)",
+  name: "Shop (relational example)",
   description:
-    "Phase 0 spike: storefront + admin over products/orders/orderItems — manual joins and multi-collection writes on the fake db.",
+    "Phase 0 example: storefront + admin over products/orders/orderItems — manual joins and multi-collection writes on the fake db.",
   source: /* js */ `
     const { useState, useEffect, useMemo } = React;
     const h = React.createElement;

@@ -1,4 +1,4 @@
-// Radix runtime shim — PHASE 0 SPIKE. THROWAWAY.
+// Radix runtime shim — PHASE 0 EXAMPLE. THROWAWAY.
 //
 // This is the browser-JS *implementation* of the contract in ./contract.ts,
 // authored as a source string because it has to run inside the cross-origin,
@@ -130,7 +130,7 @@ window.radix = (function () {
   // through on every mutation, so toggles/adds/deletes survive a reload. reset()
   // wipes persisted state back to the seed (still a contract concern). If
   // IndexedDB is unavailable (iframe lacking allow-same-origin, private mode, …)
-  // the store silently degrades to memory-only — the spike's old behaviour.
+  // the store silently degrades to memory-only — the example's old behaviour.
   var db = (function () {
     // IndexedDB adapter: one database per prototype (namespaced by URL path so
     // prototypes that share the storage origin don't collide), one object store
@@ -306,7 +306,7 @@ window.radix = (function () {
           try { idb.clear().then(persistAll).catch(function () {}); } catch (e) {}
         }
       },
-      // Spike-only: register a seed fn and run it once now (synchronously, so the
+      // Example-only: register a seed fn and run it once now (synchronously, so the
       // first render has data). Not part of the prototype-facing contract — it is
       // how an app installs its starter data. Persistence is decided by hydrate():
       // any persisted rows win over this seed.
