@@ -24,13 +24,29 @@ export const devops = {
     const STAGES = ['build', 'test', 'lint', 'deploy'];
     const STAGE_MS = { build: 3000, test: 5000, lint: 1500, deploy: 2500 };
 
-    db.__seed(function (api) {
-      PIPELINE_DEFS.forEach(function (p) {
-        api.create('pipelines', { id: p.id, name: p.name, everyMs: p.everyMs,
-          lastStatus: 'never', lastRunAt: null });
-      });
-      log.info('3 pipelines registered — advance clock to trigger runs');
+    db.define({
+      pipelines: {
+        fields: {
+          name: 'string',
+          everyMs: 'number',
+          lastStatus: { type: 'enum', values: ['never', 'running', 'passed', 'failed'], default: 'never' },
+          lastRunAt: 'number',
+        },
+        seed: PIPELINE_DEFS.map(function (p) {
+          return { id: p.id, name: p.name, everyMs: p.everyMs, lastStatus: 'never', lastRunAt: null };
+        }),
+      },
+      runs: {
+        fields: {
+          pipelineId: { type: 'ref', collection: 'pipelines' },
+          status: { type: 'enum', values: ['running', 'passed', 'failed'] },
+          stage: 'string',
+          startedAt: 'number',
+          endedAt: 'number',
+        },
+      },
     });
+    log.info('3 pipelines registered — advance clock to trigger runs');
 
     // One actor per pipeline. Each tick creates a run and walks through stages.
     var pipelineActors = PIPELINE_DEFS.map(function (def) {
@@ -91,29 +107,17 @@ export const devops = {
       }, [pipelineId]);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      var [e, setE] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setE); }, []);
-      return e;
-    }
-
     var STATUS_COLOR = { passed: '#15803d', failed: '#b91c1c', running: '#b45309', never: '#9ca3af' };
     var STATUS_DOT   = { passed: '●', failed: '●', running: '◉', never: '○' };
 
     function DevOps() {
       var pipelines = usePipelines();
-      var cs        = useClock();
-      var entries   = useLog();
       var [sel, setSel] = useState('frontend');
       var runs = useRuns(sel);
 
       useEffect(function () {
         pipelineActors.forEach(function (a) { a.start(); });
+        clock.play();
         return function () { pipelineActors.forEach(function (a) { a.stop(); }); };
       }, []);
 
@@ -134,12 +138,6 @@ export const devops = {
       return h('div', { style: S.page },
         h('div', { style: S.hdr },
           h('strong', null, 'CI/CD'),
-          h('span', { style: { color: '#9ca3af', fontSize: 11, flex: 1 } },
-            't=' + (cs.now / 1000).toFixed(0) + 's  ' + (cs.running ? '● running' : '⏸ paused')),
-          h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-          h('button', { style: S.cb, onClick: function () { clock.step(1000); } }, '+1s'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(10000); } }, '+10s'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(60000); } }, '+1m'),
         ),
         h('div', { style: S.body },
           // Pipeline list
@@ -187,14 +185,6 @@ export const devops = {
                   );
                 }),
           ),
-        ),
-        h('div', { style: S.foot },
-          entries.slice().reverse().slice(0, 6).map(function (e, i) {
-            return h('div', { key: i, style: { padding: '1px 0',
-                color: e.level === 'error' ? '#b91c1c' : '#6b7280', fontSize: 12 } },
-              (e.t / 1000).toFixed(0) + 's  ' + e.msg,
-            );
-          }),
         ),
       );
     }

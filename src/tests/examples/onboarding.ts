@@ -19,17 +19,26 @@ export const onboarding = {
 
     const STEPS = ['info', 'document', 'review', 'decision'];
 
-    db.__seed(function (api) {
-      api.create('application', {
-        id: 'app',
-        step: 'info',
-        firstName: '', lastName: '', email: '', dob: '',
-        docType: '', docUploaded: false,
-        status: 'draft',   // draft | submitted | approved | rejected
-        reviewNote: '',
-      });
-      log.info('KYC application ready');
+    db.define({
+      application: {
+        fields: {
+          step: { type: 'enum', values: ['info', 'document', 'review', 'decision'] },
+          firstName: 'string',
+          lastName: 'string',
+          email: 'string',
+          dob: 'string',
+          docType: 'string',
+          docUploaded: { type: 'boolean', default: false },
+          status: { type: 'enum', values: ['draft', 'submitted', 'approved', 'rejected'], default: 'draft' },
+          reviewNote: 'string',
+        },
+        seed: [
+          { id: 'app', step: 'info', firstName: '', lastName: '', email: '', dob: '',
+            docType: '', docUploaded: false, status: 'draft', reviewNote: '' },
+        ],
+      },
     });
+    log.info('KYC application ready');
 
     // Approval actor: triggered when application is submitted.
     // Runs a simulated review (15-25 s of sim time) then approves or rejects.
@@ -65,21 +74,8 @@ export const onboarding = {
       }, []);
       return a;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      var [e, setE] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setE); }, []);
-      return e;
-    }
-
     function Onboarding() {
       var app     = useApp();
-      var cs      = useClock();
-      var entries = useLog();
       var [form, setForm] = useState({ firstName: '', lastName: '', email: '', dob: '', docType: '' });
 
       useEffect(function () {
@@ -135,15 +131,9 @@ export const onboarding = {
         }),
       );
 
-      var clkBar = h('div', { style: { display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center' } },
-        h('span', { style: { fontSize: 11, color: '#9ca3af', flex: 1 } }, 'sim ' + (cs.now / 1000).toFixed(0) + 's'),
-        h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-        h('button', { style: S.cb, onClick: function () { clock.fastForward(10000); } }, '+10s'),
-      );
-
       if (app.step === 'info') {
         return h('div', { style: S.page },
-          clkBar, stepDots,
+          stepDots,
           h('h2', { style: { fontWeight: 700, fontSize: 20, marginBottom: 4 } }, 'Personal information'),
           h('p', { style: { fontSize: 14, color: '#6b7280', marginBottom: 16 } }, 'Step 1 of 4'),
           h('div', { style: S.card },
@@ -164,7 +154,7 @@ export const onboarding = {
 
       if (app.step === 'document') {
         return h('div', { style: S.page },
-          clkBar, stepDots,
+          stepDots,
           h('h2', { style: { fontWeight: 700, fontSize: 20, marginBottom: 4 } }, 'Identity document'),
           h('p', { style: { fontSize: 14, color: '#6b7280', marginBottom: 16 } }, 'Step 2 of 4'),
           h('div', { style: S.card },
@@ -190,7 +180,7 @@ export const onboarding = {
 
       if (app.step === 'review') {
         return h('div', { style: S.page },
-          clkBar, stepDots,
+          stepDots,
           h('h2', { style: { fontWeight: 700, fontSize: 20, marginBottom: 4 } }, 'Under review'),
           h('p', { style: { fontSize: 14, color: '#6b7280', marginBottom: 16 } }, 'Step 3 of 4'),
           h('div', { style: Object.assign({}, S.card, { textAlign: 'center', padding: '32px 20px' }) },
@@ -198,18 +188,13 @@ export const onboarding = {
             h('div', { style: { fontSize: 16, fontWeight: 600, marginBottom: 8 } }, 'Reviewing your application'),
             h('div', { style: { fontSize: 13, color: '#9ca3af' } }, 'Advance the clock to speed up the review.'),
           ),
-          h('div', { style: { fontSize: 12, color: '#6b7280' } },
-            entries.slice().reverse().slice(0, 3).map(function (e, i) {
-              return h('div', { key: i }, (e.t / 1000).toFixed(0) + 's  ' + e.msg);
-            }),
-          ),
         );
       }
 
       // decision
       var approved = app.status === 'approved';
       return h('div', { style: S.page },
-        clkBar, stepDots,
+        stepDots,
         h('div', { style: Object.assign({}, S.card, { textAlign: 'center', padding: '32px 20px' }) },
           h('div', { style: { fontSize: 40, marginBottom: 12 } }, approved ? '✓' : '✗'),
           h('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 8,

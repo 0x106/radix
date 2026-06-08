@@ -20,19 +20,40 @@ export const shop = {
     const R = window.radix;
     const db = R.db, log = R.log;
 
-    db.__seed(function (api) {
-      [
-        ['Mechanical keyboard', 12900, 8],
-        ['USB-C hub', 4500, 14],
-        ['Laptop stand', 3200, 0],
-        ['Webcam 1080p', 6800, 5],
-        ['Noise-cancelling headphones', 19900, 3],
-        ['Desk mat', 2400, 20],
-      ].forEach(function (p, i) {
-        api.create('products', { name: p[0], price: p[1], stock: p[2], seq: i });
-      });
-      log.info('seeded catalogue');
+    db.define({
+      products: {
+        fields: {
+          name: 'string',
+          price: 'number',
+          stock: { type: 'number', default: 0 },
+          seq: 'number',
+        },
+        seed: [
+          { name: 'Mechanical keyboard',        price: 12900, stock:  8, seq: 0 },
+          { name: 'USB-C hub',                  price:  4500, stock: 14, seq: 1 },
+          { name: 'Laptop stand',               price:  3200, stock:  0, seq: 2 },
+          { name: 'Webcam 1080p',               price:  6800, stock:  5, seq: 3 },
+          { name: 'Noise-cancelling headphones',price: 19900, stock:  3, seq: 4 },
+          { name: 'Desk mat',                   price:  2400, stock: 20, seq: 5 },
+        ],
+      },
+      orders: {
+        fields: {
+          status: { type: 'enum', values: ['paid', 'shipped', 'refunded'] },
+          total: 'number',
+          createdAt: 'number',
+        },
+      },
+      orderItems: {
+        fields: {
+          orderId: { type: 'ref', collection: 'orders' },
+          productId: { type: 'ref', collection: 'products' },
+          qty: 'number',
+          priceAt: 'number',
+        },
+      },
     });
+    log.info('seeded catalogue');
 
     const money = function (c) { return '$' + (c / 100).toFixed(2); };
 

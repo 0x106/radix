@@ -216,6 +216,7 @@ window.radix = (function () {
     var persistOn = false;   // IndexedDB confirmed usable (set once hydrate runs)
     var suspend = false;     // batch guard: skip write-through during seed/reset
     var touched = false;     // a real (non-seed) mutation happened — see hydrate
+    var _schema = {};        // { collName: { fields: {fieldName: {type,...}}, strict: bool } }
     function genId() { return 'e' + (idn++); }
     function rows(c) {
       var m = store[c] || {};
@@ -239,16 +240,56 @@ window.radix = (function () {
       if (!persistOn) { return; }
       for (var c in store) { persist(c); }
     }
+    function normalizeField(f) {
+      return (typeof f === 'string') ? { type: f } : f;
+    }
+    function applyDefaults(c, data) {
+      var cs = _schema[c]; if (!cs) { return data; }
+      var out = Object.assign({}, data);
+      for (var f in cs.fields) {
+        if (out[f] === undefined && cs.fields[f].default !== undefined) {
+          out[f] = cs.fields[f].default;
+        }
+      }
+      return out;
+    }
+    function validateData(c, data, ctx) {
+      var cs = _schema[c]; if (!cs) { return; }
+      var fields = cs.fields;
+      for (var f in fields) {
+        var fd = fields[f];
+        var val = data[f];
+        if (val === undefined || val === null) {
+          if (fd.required && ctx === 'create') {
+            var msg = 'db.' + ctx + '(' + c + '): required field "' + f + '" is missing';
+            if (cs.strict) { throw new Error(msg); } else { log.warn(msg); }
+          }
+          continue;
+        }
+        var ok = true; var reason = '';
+        if (fd.type === 'string')  { ok = typeof val === 'string';  reason = 'expected string'; }
+        else if (fd.type === 'number')  { ok = typeof val === 'number';  reason = 'expected number'; }
+        else if (fd.type === 'boolean') { ok = typeof val === 'boolean'; reason = 'expected boolean'; }
+        else if (fd.type === 'enum')    { ok = fd.values && fd.values.indexOf(val) >= 0; reason = 'expected one of ' + (fd.values || []).join('|'); }
+        if (!ok) {
+          var wmsg = 'db.' + ctx + '(' + c + '): field "' + f + '" invalid (' + reason + ', got ' + typeof val + ' ' + JSON.stringify(val) + ')';
+          if (cs.strict) { throw new Error(wmsg); } else { log.warn(wmsg); }
+        }
+      }
+    }
     var api = {
       create: function (c, data) {
-        var id = (data && data.id) ? data.id : genId();
-        var ent = Object.assign({}, data, { id: id });
+        var d = applyDefaults(c, data);
+        var id = (d && d.id) ? d.id : genId();
+        var ent = Object.assign({}, d, { id: id });
+        validateData(c, ent, 'create');
         (store[c] || (store[c] = {}))[id] = ent;
         if (!suspend) { touched = true; }
         notify(c); persist(c);
         return ent;
       },
       update: function (c, id, patch) {
+        validateData(c, patch, 'update');
         var m = store[c] || (store[c] = {});
         var cur = m[id] || { id: id };
         var ent = Object.assign({}, cur, patch, { id: id });
@@ -306,10 +347,30 @@ window.radix = (function () {
           try { idb.clear().then(persistAll).catch(function () {}); } catch (e) {}
         }
       },
-      // Example-only: register a seed fn and run it once now (synchronously, so the
-      // first render has data). Not part of the prototype-facing contract — it is
-      // how an app installs its starter data. Persistence is decided by hydrate():
-      // any persisted rows win over this seed.
+      define: function (schemaDef, opts) {
+        var strict = !!(opts && opts.strict);
+        suspend = true;
+        for (var collName in schemaDef) {
+          var collDef = schemaDef[collName];
+          var fields = {};
+          var rawFields = collDef.fields || {};
+          for (var f in rawFields) { fields[f] = normalizeField(rawFields[f]); }
+          _schema[collName] = { fields: fields, strict: strict };
+          var seedRows = collDef.seed || [];
+          for (var i = 0; i < seedRows.length; i++) { api.create(collName, seedRows[i]); }
+        }
+        suspend = false;
+        seedFn = function (a) {
+          for (var collName in schemaDef) {
+            var collDef = schemaDef[collName];
+            var seedRows = collDef.seed || [];
+            for (var i = 0; i < seedRows.length; i++) { a.create(collName, seedRows[i]); }
+          }
+        };
+      },
+      schema: function () { return _schema; },
+      // Legacy: register an imperative seed function. Still works for backwards
+      // compat but db.define() is preferred.
       __seed: function (fn) {
         seedFn = fn;
         suspend = true;
@@ -476,16 +537,36 @@ window.radix = (function () {
   }
 
   // ---- shell message bridge -----------------------------------------------
-  // Allows the Radix app shell to inspect and control the prototype db from
+  // Allows the Radix app shell to inspect and control the prototype from
   // outside the iframe via postMessage (cross-origin direct access is blocked).
   window.addEventListener('message', function (e) {
     if (!e.data || typeof e.data !== 'object') { return; }
     if (e.data.type === 'radix:dump') {
       window.parent.postMessage({ type: 'radix:dump:response', data: db.dump() }, '*');
+    } else if (e.data.type === 'radix:db:schema') {
+      window.parent.postMessage({ type: 'radix:db:schema:response', schema: db.schema() }, '*');
     } else if (e.data.type === 'radix:reset') {
       db.reset();
       window.parent.postMessage({ type: 'radix:reset:done', data: db.dump() }, '*');
+    } else if (e.data.type === 'radix:clock:play') {
+      clock.play();
+    } else if (e.data.type === 'radix:clock:pause') {
+      clock.pause();
+    } else if (e.data.type === 'radix:clock:step') {
+      clock.step(typeof e.data.ms === 'number' ? e.data.ms : 1000);
+    } else if (e.data.type === 'radix:clock:get') {
+      window.parent.postMessage({ type: 'radix:clock:state', now: clock.now(), running: clock.isRunning() }, '*');
+    } else if (e.data.type === 'radix:log:get') {
+      window.parent.postMessage({ type: 'radix:log:entries', entries: log.entries() }, '*');
     }
+  });
+
+  // Push clock and log state to the shell whenever they change.
+  clock.subscribe(function (now, running) {
+    try { window.parent.postMessage({ type: 'radix:clock:state', now: now, running: running }, '*'); } catch (err) {}
+  });
+  log.subscribe(function (entries) {
+    try { window.parent.postMessage({ type: 'radix:log:entries', entries: entries }, '*'); } catch (err) {}
   });
 
   return { db: db, events: events, clock: clock, random: random, log: log, actor: actor, services: services };

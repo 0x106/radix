@@ -24,14 +24,23 @@ export const taskboard = {
       'Performance audit', 'Add error handling', 'Security review', 'API docs',
     ];
 
-    db.__seed(function (api) {
-      api.create('cards', { id: 'c1', title: 'Fix auth bug',      col: 'todo',  who: 'Alice' });
-      api.create('cards', { id: 'c2', title: 'Update README',     col: 'todo',  who: 'Bob'   });
-      api.create('cards', { id: 'c3', title: 'Refactor DB layer', col: 'doing', who: 'Carol' });
-      api.create('cards', { id: 'c4', title: 'Write unit tests',  col: 'doing', who: 'Alice' });
-      api.create('cards', { id: 'c5', title: 'Deploy to staging', col: 'done',  who: 'Bob'   });
-      log.info('board ready');
+    db.define({
+      cards: {
+        fields: {
+          title: 'string',
+          col: { type: 'enum', values: ['todo', 'doing', 'done'] },
+          who: 'string',
+        },
+        seed: [
+          { id: 'c1', title: 'Fix auth bug',      col: 'todo',  who: 'Alice' },
+          { id: 'c2', title: 'Update README',      col: 'todo',  who: 'Bob'   },
+          { id: 'c3', title: 'Refactor DB layer',  col: 'doing', who: 'Carol' },
+          { id: 'c4', title: 'Write unit tests',   col: 'doing', who: 'Alice' },
+          { id: 'c5', title: 'Deploy to staging',  col: 'done',  who: 'Bob'   },
+        ],
+      },
     });
+    log.info('board ready');
 
     // Collaborator: every 4–7 s either creates a card in todo or advances one.
     const collaborator = R.actor({
@@ -61,21 +70,8 @@ export const taskboard = {
       }, []);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      var [e, setE] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setE); }, []);
-      return e;
-    }
-
     function Board() {
       var cards = useCards();
-      var cs = useClock();
-      var entries = useLog();
       var [draft, setDraft] = useState('');
 
       useEffect(function () {
@@ -110,10 +106,6 @@ export const taskboard = {
       return h('div', { style: S.page },
         h('div', { style: S.hdr },
           h('strong', { style: { flex: 1, fontSize: 14 } }, 'Task Board'),
-          h('span', { style: { fontSize: 11, color: '#9ca3af' } }, (cs.now / 1000).toFixed(0) + 's'),
-          h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } },
-            cs.running ? 'Pause' : 'Play'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(10000); } }, '+10s'),
           h('input', { style: { border: '1px solid #e5e7eb', borderRadius: 7, padding: '4px 8px', fontSize: 12, width: 130 },
             value: draft, placeholder: 'New card title',
             onChange: function (e) { setDraft(e.target.value); },
@@ -150,11 +142,6 @@ export const taskboard = {
                 );
               }),
             );
-          }),
-        ),
-        h('div', { style: S.foot },
-          entries.slice().reverse().slice(0, 4).map(function (e, i) {
-            return h('div', { key: i }, (e.t / 1000).toFixed(0) + 's  ' + e.msg);
           }),
         ),
       );

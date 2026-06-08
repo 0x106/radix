@@ -23,15 +23,28 @@ export const smarthome = {
     const db = R.db, events = R.events, clock = R.clock, log = R.log;
 
     // Seed: one row per device; actors will keep these rows up to date.
-    db.__seed(function (api) {
-      api.create('devices', { id: 'thermostat', type: 'thermostat', label: 'Thermostat',
-        temperature: 68, target: 70, mode: 'idle' });
-      api.create('devices', { id: 'light-living', type: 'light', label: 'Living room', on: false });
-      api.create('devices', { id: 'light-bedroom', type: 'light', label: 'Bedroom', on: false });
-      api.create('devices', { id: 'light-kitchen', type: 'light', label: 'Kitchen', on: false });
-      api.create('devices', { id: 'lock-front', type: 'lock', label: 'Front door', locked: true, pending: false });
-      log.info('devices seeded');
+    db.define({
+      devices: {
+        fields: {
+          type: { type: 'enum', values: ['thermostat', 'light', 'lock'] },
+          label: 'string',
+          on: 'boolean',
+          locked: 'boolean',
+          pending: 'boolean',
+          temperature: 'number',
+          target: 'number',
+          mode: { type: 'enum', values: ['idle', 'heating', 'cooling'] },
+        },
+        seed: [
+          { id: 'thermostat',    type: 'thermostat', label: 'Thermostat',   temperature: 68, target: 70, mode: 'idle' },
+          { id: 'light-living',  type: 'light',      label: 'Living room',  on: false },
+          { id: 'light-bedroom', type: 'light',      label: 'Bedroom',      on: false },
+          { id: 'light-kitchen', type: 'light',      label: 'Kitchen',      on: false },
+          { id: 'lock-front',    type: 'lock',       label: 'Front door',   locked: true, pending: false },
+        ],
+      },
     });
+    log.info('devices seeded');
 
     // --- Thermostat actor ---------------------------------------------------
     // Ticks every 1s of sim time. If heating/cooling, nudges temperature toward
@@ -122,21 +135,8 @@ export const smarthome = {
       useEffect(function () { return db.subscribe('devices', function () { setRows(read()); }); }, []);
       return rows;
     }
-    function useClock() {
-      const [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (now, running) { setS({ now, running }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      const [entries, setEntries] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setEntries); }, []);
-      return entries;
-    }
-
     function SmartHome() {
       const devices = useDevices();
-      const cs = useClock();
-      const logEntries = useLog();
       const [targetInput, setTargetInput] = useState('70');
 
       useEffect(function () {
@@ -168,23 +168,10 @@ export const smarthome = {
           background: danger ? (active ? '#fee2e2' : '#fafafa') : (active ? '#111' : '#f3f4f6'),
           color: danger ? (active ? '#b91c1c' : '#6b7280') : (active ? '#fff' : '#374151') };
       };
-      const ctrlBtn = { border: '1px solid #e5e5e5', background: '#fafafa', borderRadius: 8,
-        padding: '5px 10px', cursor: 'pointer', fontSize: 12 };
-
       const modeColor = { idle: '#9ca3af', heating: '#b45309', cooling: '#2563eb' };
 
       return h('div', { style: page },
-        // Header + clock controls
-        h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 20 } },
-          h('h1', { style: { fontSize: 24, fontWeight: 700, margin: 0 } }, 'Home'),
-          h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-            h('span', { style: { fontSize: 12, color: '#9ca3af', marginRight: 4 } }, 'sim ' + (cs.now / 1000).toFixed(0) + 's'),
-            h('button', { style: ctrlBtn, onClick: function () { cs.running ? clock.pause() : clock.play(); } },
-              cs.running ? '⏸' : '▶'),
-            h('button', { style: ctrlBtn, onClick: function () { clock.step(5000); } }, '+5s'),
-            h('button', { style: ctrlBtn, onClick: function () { clock.fastForward(60000); } }, '+1m'),
-          ),
-        ),
+        h('h1', { style: { fontSize: 24, fontWeight: 700, margin: 0, marginBottom: 20 } }, 'Home'),
 
         // Thermostat
         h('div', { style: card },
@@ -243,19 +230,6 @@ export const smarthome = {
           ),
         ),
 
-        // Log
-        h('div', null,
-          h('div', { style: Object.assign({}, label, { marginBottom: 6 }) }, 'activity'),
-          h('div', { style: { fontSize: 12, color: '#6b7280' } },
-            logEntries.length === 0
-              ? h('span', { style: { color: '#9ca3af' } }, 'No activity yet.')
-              : logEntries.slice().reverse().slice(0, 8).map(function (e, i) {
-                return h('div', { key: i, style: { padding: '2px 0' } },
-                  h('span', { style: { color: '#9ca3af', marginRight: 8 } }, (e.t / 1000).toFixed(0) + 's'),
-                  e.msg + (e.data !== undefined ? ' · ' + (typeof e.data === 'string' ? e.data : JSON.stringify(e.data)) : ''));
-              }),
-          ),
-        ),
       );
     }
 

@@ -35,31 +35,33 @@ export const finance = {
 
     // Build a believable ledger deterministically. Amounts are integer cents;
     // income is positive, spend negative.
-    db.__seed(function (api) {
-      let seq = 0;
-      MONTHS.forEach(function (month) {
-        // one salary credit + rent debit per month
-        api.create('transactions', { month: month, date: month + '-01', category: 'Salary',
-          merchant: 'Acme Corp', amount: 540000, seq: seq++ });
-        api.create('transactions', { month: month, date: month + '-03', category: 'Rent',
-          merchant: 'Landlord', amount: -220000, seq: seq++ });
-        // ~10 random spend transactions
-        for (let i = 0; i < 10; i++) {
-          const cat = random.pick(['Groceries', 'Transport', 'Dining', 'Utilities', 'Shopping']);
-          const day = random.int(2, 27);
-          const amt = -random.int(800, 14000);
-          api.create('transactions', {
-            month: month,
-            date: month + '-' + (day < 10 ? '0' + day : '' + day),
-            category: cat,
-            merchant: random.pick(MERCHANTS[cat]),
-            amount: amt,
-            seq: seq++,
+    db.define({
+      transactions: {
+        fields: {
+          month: 'string',
+          date: 'string',
+          category: { type: 'enum', values: ['Salary', 'Rent', 'Groceries', 'Transport', 'Dining', 'Utilities', 'Shopping'] },
+          merchant: 'string',
+          amount: 'number',
+          seq: 'number',
+        },
+        seed: (function () {
+          var rows = []; var s = 0;
+          MONTHS.forEach(function (month) {
+            rows.push({ month: month, date: month + '-01', category: 'Salary', merchant: 'Acme Corp', amount: 540000, seq: s++ });
+            rows.push({ month: month, date: month + '-03', category: 'Rent',   merchant: 'Landlord',  amount: -220000, seq: s++ });
+            for (var i = 0; i < 10; i++) {
+              var cat = random.pick(['Groceries', 'Transport', 'Dining', 'Utilities', 'Shopping']);
+              var day = random.int(2, 27);
+              rows.push({ month: month, date: month + '-' + (day < 10 ? '0' + day : '' + day),
+                category: cat, merchant: random.pick(MERCHANTS[cat]), amount: -random.int(800, 14000), seq: s++ });
+            }
           });
-        }
-      });
-      log.info('seeded ledger', { months: MONTHS.length });
+          return rows;
+        })(),
+      },
     });
+    log.info('seeded ledger', { months: MONTHS.length });
 
     const money = function (cents) {
       const neg = cents < 0;

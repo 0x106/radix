@@ -28,15 +28,29 @@ export const music = {
       { id: 't10', title: 'Slow Burn',         artist: 'Synthwave Collective',  dur: 38 },
     ];
 
-    db.__seed(function (api) {
-      TRACKS_DATA.forEach(function (t) {
-        api.create('tracks', { id: t.id, title: t.title, artist: t.artist, duration: t.dur });
-      });
-      api.create('playback', {
-        id: 'state', trackId: null, position: 0, playing: false,
-      });
-      log.info('10 tracks loaded');
+    db.define({
+      tracks: {
+        fields: {
+          title: 'string',
+          artist: 'string',
+          duration: 'number',
+        },
+        seed: TRACKS_DATA.map(function (t) {
+          return { id: t.id, title: t.title, artist: t.artist, duration: t.dur };
+        }),
+      },
+      playback: {
+        fields: {
+          trackId: 'string',
+          position: { type: 'number', default: 0 },
+          playing: { type: 'boolean', default: false },
+        },
+        seed: [
+          { id: 'state', trackId: null, position: 0, playing: false },
+        ],
+      },
     });
+    log.info('10 tracks loaded');
 
     // Player actor: ticks every 1 s. Advances position when playing; auto-skips on track end.
     const playerActor = R.actor({
@@ -74,12 +88,6 @@ export const music = {
       }, []);
       return pb;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-
     function fmt(secs) {
       var m = Math.floor(secs / 60), s = secs % 60;
       return m + ':' + (s < 10 ? '0' : '') + s;
@@ -88,7 +96,6 @@ export const music = {
     function MusicPlayer() {
       var tracks  = useTracks();
       var pb      = usePlayback();
-      var cs      = useClock();
 
       useEffect(function () {
         playerActor.start(); clock.play();
@@ -136,9 +143,6 @@ export const music = {
       return h('div', { style: S.page },
         h('div', { style: S.hdr },
           h('strong', { style: { flex: 1 } }, 'Music'),
-          h('span', { style: { fontSize: 11, color: '#9ca3af' } }, (cs.now / 1000).toFixed(0) + 's'),
-          h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause sim' : 'Play sim'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(10000); } }, '+10s'),
         ),
         h('div', { style: S.np },
           h('div', { style: { textAlign: 'center', marginBottom: 14 } },

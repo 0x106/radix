@@ -32,8 +32,17 @@ export const slackbot = {
       bye:     ['Goodbye!', 'See you later!', 'Take care!'],
     };
 
-    db.__seed(function (api) {
-      api.create('messages', { id: 'm0', author: BOT, text: 'Hello! I am Radix Bot. Try: hello, help, time, joke, ping.', ts: 0 });
+    db.define({
+      messages: {
+        fields: {
+          author: 'string',
+          text: 'string',
+          ts: { type: 'number', default: 0 },
+        },
+        seed: [
+          { id: 'm0', author: BOT, text: 'Hello! I am Radix Bot. Try: hello, help, time, joke, ping.', ts: 0 },
+        ],
+      },
     });
 
     // Bot actor: reacts to 'message:new', picks a response after a short delay.
@@ -83,15 +92,8 @@ export const slackbot = {
       }, []);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-
     function SlackBot() {
       var messages = useMessages();
-      var cs       = useClock();
       var [draft, setDraft] = useState('');
       var bottomRef = useRef(null);
 
@@ -127,9 +129,7 @@ export const slackbot = {
       return h('div', { style: S.page },
         h('div', { style: S.hdr },
           h('div', { style: { width: 8, height: 8, borderRadius: '50%', background: '#15803d' } }),
-          h('strong', { style: { fontSize: 14, flex: 1 } }, '# general'),
-          h('span', { style: { fontSize: 11, color: '#9ca3af' } }, (cs.now / 1000).toFixed(0) + 's'),
-          h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
+          h('strong', { style: { fontSize: 14 } }, '# general'),
         ),
         h('div', { style: S.feed },
           messages.map(function (msg) {

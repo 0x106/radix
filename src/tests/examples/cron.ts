@@ -28,13 +28,21 @@ export const cron = {
       { id: 'rebuild-search',   label: 'Rebuild search index',  everyMs:  45000, durationMs: 2000 },
     ];
 
-    db.__seed(function (api) {
-      JOB_DEFS.forEach(function (j) {
-        api.create('jobs', { id: j.id, label: j.label, everyMs: j.everyMs,
-          status: 'idle', runs: 0, lastRanAt: null });
-      });
-      log.info('scheduler ready — ' + JOB_DEFS.length + ' jobs registered (clock paused; press Play or Step)');
+    db.define({
+      jobs: {
+        fields: {
+          label: 'string',
+          everyMs: 'number',
+          status: { type: 'enum', values: ['idle', 'running'] },
+          runs: { type: 'number', default: 0 },
+          lastRanAt: 'number',
+        },
+        seed: JOB_DEFS.map(function (j) {
+          return { id: j.id, label: j.label, everyMs: j.everyMs, status: 'idle', runs: 0, lastRanAt: null };
+        }),
+      },
     });
+    log.info('scheduler ready — ' + JOB_DEFS.length + ' jobs registered');
 
     // One actor per job. Each fires on its own schedule and records runs in db.
     const jobActors = JOB_DEFS.map(function (def) {
@@ -61,72 +69,32 @@ export const cron = {
       useEffect(function () { return db.subscribe('jobs', function () { setRows(read()); }); }, []);
       return rows;
     }
-    function useLog() {
-      const [entries, setEntries] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setEntries); }, []);
-      return entries;
-    }
-    function useClock() {
-      const [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (now, running) { setS({ now, running }); }); }, []);
-      return s;
-    }
-
-    const LEVEL_COLOR = { debug: '#9ca3af', info: '#2563eb', warn: '#b45309', error: '#b91c1c' };
     const STATUS_DOT = { idle: '#9ca3af', running: '#b45309' };
 
     function Console() {
       const jobs = useJobs();
-      const entries = useLog();
-      const cs = useClock();
 
       useEffect(function () {
         jobActors.forEach(function (a) { a.start(); });
+        clock.play();
         return function () { jobActors.forEach(function (a) { a.stop(); }); };
       }, []);
-
-      const sec = (cs.now / 1000).toFixed(1);
 
       const wrap = { display: 'flex', flexDirection: 'column', height: '100vh',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#111', background: '#fff' };
       const head = { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
         borderBottom: '1px solid #ececec', fontSize: 13 };
       const tag = { fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 6, padding: '2px 7px' };
-      const btn = { border: '1px solid #e5e5e5', background: '#fafafa', borderRadius: 8,
-        padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' };
-      const body = { flex: 1, display: 'flex', minHeight: 0 };
-      const logPane = { flex: 2, overflowY: 'auto', padding: '12px 14px', borderRight: '1px solid #ececec' };
-      const statePane = { flex: 1, overflowY: 'auto', padding: '12px 14px' };
-      const logRow = { display: 'flex', gap: 10, padding: '2px 0', fontSize: 12.5, lineHeight: 1.5 };
+      const body = { flex: 1, overflowY: 'auto', padding: '12px 14px' };
 
       return h('div', { style: wrap },
         h('div', { style: head },
           h('strong', null, 'cron-scheduler'),
           h('span', { style: tag }, 'headless'),
-          h('span', { style: { color: '#6b7280' } }, 'sim t=' + sec + 's'),
-          h('span', { style: { color: cs.running ? '#15803d' : '#b45309' } }, cs.running ? '● running' : '⏸ paused'),
-          h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
-            h('button', { style: btn, onClick: function () { cs.running ? clock.pause() : clock.play(); } },
-              cs.running ? 'Pause' : 'Play'),
-            h('button', { style: btn, onClick: function () { clock.step(1000); } }, 'Step +1s'),
-            h('button', { style: btn, onClick: function () { clock.fastForward(5000); } }, '+5s'),
-            h('button', { style: btn, onClick: function () { clock.fastForward(60000); } }, '+1m'),
-          ),
         ),
         h('div', { style: body },
-          h('div', { style: logPane },
-            h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'event log'),
-            entries.slice().reverse().map(function (e, i) {
-              return h('div', { key: i, style: logRow },
-                h('span', { style: { color: '#9ca3af', minWidth: 56 } }, (e.t / 1000).toFixed(1) + 's'),
-                h('span', { style: { color: LEVEL_COLOR[e.level], minWidth: 44, textTransform: 'uppercase' } }, e.level),
-                h('span', null, e.msg + (e.data !== undefined ? ' — ' + (typeof e.data === 'string' ? e.data : JSON.stringify(e.data)) : '')),
-              );
-            }),
-          ),
-          h('div', { style: statePane },
-            h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'jobs'),
-            jobs.map(function (j) {
+          h('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'jobs'),
+          jobs.map(function (j) {
               const every = j.everyMs >= 60000
                 ? (j.everyMs / 60000).toFixed(0) + 'm'
                 : (j.everyMs / 1000).toFixed(0) + 's';

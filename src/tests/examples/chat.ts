@@ -51,17 +51,8 @@ export const chat = {
       useEffect(function () { return db.subscribe('messages', function () { setRows(read()); }); }, []);
       return rows;
     }
-    function useClock() {
-      const [state, setState] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () {
-        return clock.subscribe(function (now, running) { setState({ now: now, running: running }); });
-      }, []);
-      return state;
-    }
-
     function Chat() {
       const messages = useMessages();
-      const cs = useClock();
       const [text, setText] = useState('');
 
       // Wire the incoming-event bus to the transcript, and start the actor + clock once.
@@ -86,13 +77,10 @@ export const chat = {
         }, 1500);
       };
 
-      const sec = (cs.now / 1000).toFixed(1);
       const wrap = { display: 'flex', flexDirection: 'column', height: '100vh',
         fontFamily: 'ui-sans-serif, system-ui, sans-serif', color: '#111', background: '#fff' };
       const bar = { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
         borderBottom: '1px solid #ececec', fontSize: 13, color: '#6b7280' };
-      const ctrlBtn = { border: '1px solid #e5e5e5', background: '#fafafa', borderRadius: 8,
-        padding: '4px 10px', cursor: 'pointer', fontSize: 13 };
       const list = { flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 };
       const bubble = function (mine) { return { alignSelf: mine ? 'flex-end' : 'flex-start',
         maxWidth: '72%', padding: '9px 13px', borderRadius: 16, fontSize: 15,
@@ -105,13 +93,6 @@ export const chat = {
       return h('div', { style: wrap },
         h('div', { style: bar },
           h('strong', { style: { color: '#111' } }, 'Sam'),
-          h('span', null, '· sim t=' + sec + 's'),
-          h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
-            h('button', { style: ctrlBtn, onClick: function () { cs.running ? clock.pause() : clock.play(); } },
-              cs.running ? '⏸ Pause' : '▶ Play'),
-            h('button', { style: ctrlBtn, onClick: function () { clock.step(1000); } }, '⏭ +1s'),
-            h('button', { style: ctrlBtn, onClick: function () { clock.fastForward(10000); } }, '⏩ +10s'),
-          ),
         ),
         h('div', { style: list },
           messages.map(function (m) {

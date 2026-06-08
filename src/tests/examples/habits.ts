@@ -19,10 +19,20 @@ export const habits = {
     const log = window.radix.log;
 
     // --- seed: installed once; re-run on db.reset() -----------------------
-    db.__seed(function (api) {
-      ['Drink water', 'Read 20 min', 'Stretch'].forEach(function (name, i) {
-        api.create('habits', { name: name, streak: i === 0 ? 3 : 0, doneToday: i === 0, seq: i });
-      });
+    db.define({
+      habits: {
+        fields: {
+          name: 'string',
+          streak: { type: 'number', default: 0 },
+          doneToday: { type: 'boolean', default: false },
+          seq: 'number',
+        },
+        seed: [
+          { name: 'Drink water', streak: 3, doneToday: true,  seq: 0 },
+          { name: 'Read 20 min', streak: 0, doneToday: false, seq: 1 },
+          { name: 'Stretch',     streak: 0, doneToday: false, seq: 2 },
+        ],
+      },
     });
 
     function useCollection(name) {

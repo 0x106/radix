@@ -27,9 +27,20 @@ export const trivia = {
     ];
     const ROUND_SECS = 10;
 
-    db.__seed(function (api) {
-      api.create('game', { id: 'state', qi: 0, phase: 'answering',
-        timer: ROUND_SECS, playerScore: 0, aliceScore: 0, bobScore: 0 });
+    db.define({
+      game: {
+        fields: {
+          qi: { type: 'number', default: 0 },
+          phase: { type: 'enum', values: ['answering', 'results', 'done'] },
+          timer: 'number',
+          playerScore: { type: 'number', default: 0 },
+          aliceScore: { type: 'number', default: 0 },
+          bobScore: { type: 'number', default: 0 },
+        },
+        seed: [
+          { id: 'state', qi: 0, phase: 'answering', timer: ROUND_SECS, playerScore: 0, aliceScore: 0, bobScore: 0 },
+        ],
+      },
     });
 
     // Game master: ticks every 1 s, manages timer and phase transitions.
@@ -97,12 +108,6 @@ export const trivia = {
       }, []);
       return g;
     }
-    function useClock() {
-      var [s, setS] = useState({ running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (_, r) { setS({ running: r }); }); }, []);
-      return s;
-    }
-
     function restart() {
       db.reset();
       gameMaster.stop(); alice.stop(); bob.stop();
@@ -111,7 +116,6 @@ export const trivia = {
 
     function TriviaGame() {
       var g    = useGame();
-      var cs   = useClock();
       var [myAnswer, setMyAnswer] = useState(-1);
 
       useEffect(function () {
@@ -161,12 +165,8 @@ export const trivia = {
       var showing = g.phase === 'results' || myAnswer >= 0;
 
       return h('div', { style: S.page },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
+        h('div', { style: { marginBottom: 14 } },
           h('span', { style: { fontSize: 13, color: '#9ca3af' } }, 'Q' + (g.qi + 1) + ' of ' + QS.length),
-          h('div', { style: { display: 'flex', gap: 6 } },
-            h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-            h('button', { style: S.cb, onClick: function () { clock.step(1000); } }, '+1s'),
-          ),
         ),
         h('div', { style: Object.assign({}, S.card, { display: 'flex', gap: 0 }) },
           [['You', g.playerScore], ['Alice', g.aliceScore], ['Bob', g.bobScore]].map(function (p) {

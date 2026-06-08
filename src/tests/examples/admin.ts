@@ -24,22 +24,35 @@ export const admin = {
     const ROLES = ['admin', 'member', 'viewer'];
     const STATUSES = ['active', 'invited', 'suspended'];
 
-    db.__seed(function (api) {
-      const people = [
-        ['Ada Lovelace', 'ada@radix.dev', 'admin', 'active'],
-        ['Alan Turing', 'alan@radix.dev', 'admin', 'active'],
-        ['Grace Hopper', 'grace@radix.dev', 'member', 'active'],
-        ['Katherine Johnson', 'katherine@radix.dev', 'member', 'invited'],
-        ['Edsger Dijkstra', 'edsger@radix.dev', 'member', 'suspended'],
-        ['Barbara Liskov', 'barbara@radix.dev', 'viewer', 'active'],
-        ['Donald Knuth', 'don@radix.dev', 'viewer', 'invited'],
-        ['Margaret Hamilton', 'margaret@radix.dev', 'member', 'active'],
-      ];
-      people.forEach(function (p, i) {
-        api.create('users', { name: p[0], email: p[1], role: p[2], status: p[3], seq: i });
-      });
-      log.info('seeded ' + people.length + ' users');
+    db.define({
+      users: {
+        fields: {
+          name: 'string',
+          email: 'string',
+          role: { type: 'enum', values: ['admin', 'member', 'viewer'] },
+          status: { type: 'enum', values: ['active', 'invited', 'suspended'] },
+          seq: 'number',
+        },
+        seed: [
+          { name: 'Ada Lovelace',      email: 'ada@radix.dev',       role: 'admin',  status: 'active',    seq: 0 },
+          { name: 'Alan Turing',       email: 'alan@radix.dev',      role: 'admin',  status: 'active',    seq: 1 },
+          { name: 'Grace Hopper',      email: 'grace@radix.dev',     role: 'member', status: 'active',    seq: 2 },
+          { name: 'Katherine Johnson', email: 'katherine@radix.dev', role: 'member', status: 'invited',   seq: 3 },
+          { name: 'Edsger Dijkstra',   email: 'edsger@radix.dev',    role: 'member', status: 'suspended', seq: 4 },
+          { name: 'Barbara Liskov',    email: 'barbara@radix.dev',   role: 'viewer', status: 'active',    seq: 5 },
+          { name: 'Donald Knuth',      email: 'don@radix.dev',       role: 'viewer', status: 'invited',   seq: 6 },
+          { name: 'Margaret Hamilton', email: 'margaret@radix.dev',  role: 'member', status: 'active',    seq: 7 },
+        ],
+      },
+      audit: {
+        fields: {
+          at: 'number',
+          action: 'string',
+          detail: 'string',
+        },
+      },
     });
+    log.info('seeded 8 users');
 
     function audit(action, detail) {
       db.create('audit', { at: Date.now(), action: action, detail: detail });

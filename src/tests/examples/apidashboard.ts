@@ -39,13 +39,31 @@ export const apidashboard = {
       return 200;
     }
 
-    db.__seed(function (api) {
-      ENDPOINT_DEFS.forEach(function (e) {
-        api.create('endpoints', { id: e.id, method: e.method, path: e.path,
-          requests: 0, errors: 0, totalLatency: 0 });
-      });
-      log.info('7 endpoints registered — advance clock to generate traffic');
+    db.define({
+      endpoints: {
+        fields: {
+          method: { type: 'enum', values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
+          path: 'string',
+          requests: { type: 'number', default: 0 },
+          errors: { type: 'number', default: 0 },
+          totalLatency: { type: 'number', default: 0 },
+        },
+        seed: ENDPOINT_DEFS.map(function (e) {
+          return { id: e.id, method: e.method, path: e.path, requests: 0, errors: 0, totalLatency: 0 };
+        }),
+      },
+      requests: {
+        fields: {
+          endpointId: 'string',
+          method: { type: 'enum', values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
+          path: 'string',
+          status: 'number',
+          latency: 'number',
+          ts: 'number',
+        },
+      },
     });
+    log.info('7 endpoints registered — advance clock to generate traffic');
 
     // Traffic actor: every 600–1800 ms generates a request to a random endpoint.
     const traffic = R.actor({
@@ -89,12 +107,6 @@ export const apidashboard = {
       }, []);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-
     var METHOD_COLOR = { GET: '#2563eb', POST: '#15803d', DELETE: '#b91c1c', PATCH: '#b45309', PUT: '#7c3aed' };
     function statusColor(s) {
       if (s < 300) return '#15803d';
@@ -105,10 +117,10 @@ export const apidashboard = {
     function ApiDashboard() {
       var endpoints = useEndpoints();
       var requests  = useRequests();
-      var cs        = useClock();
 
       useEffect(function () {
         traffic.start();
+        clock.play();
         return function () { traffic.stop(); };
       }, []);
 
@@ -132,11 +144,7 @@ export const apidashboard = {
         h('div', { style: S.hdr },
           h('strong', null, 'API Monitor'),
           h('span', { style: { color: '#9ca3af', flex: 1 } },
-            'total: ' + totalReqs + '  errors: ' + errorRate + '%  t=' + (cs.now / 1000).toFixed(0) + 's'),
-          h('span', { style: { color: cs.running ? '#15803d' : '#b45309' } }, cs.running ? '● live' : '⏸'),
-          h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(5000); } }, '+5s'),
-          h('button', { style: S.cb, onClick: function () { clock.fastForward(30000); } }, '+30s'),
+            'total: ' + totalReqs + '  errors: ' + errorRate + '%'),
         ),
         h('div', { style: S.body },
           // Endpoint health table

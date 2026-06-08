@@ -20,13 +20,29 @@ export const rideshare = {
     const DROPOFFS = ['Midtown Hotel', 'Business District', 'South Station',
                       'Harbor View', 'Stadium', 'Old Town'];
 
-    db.__seed(function (api) {
-      api.create('driver', {
-        id: 'me', status: 'available',
-        earnings: 0, ridesCompleted: 0,
-      });
-      log.info('driver online — waiting for requests');
+    db.define({
+      driver: {
+        fields: {
+          status: { type: 'enum', values: ['available', 'on_ride'] },
+          earnings: { type: 'number', default: 0 },
+          ridesCompleted: { type: 'number', default: 0 },
+          currentRequestId: 'string',
+        },
+        seed: [
+          { id: 'me', status: 'available', earnings: 0, ridesCompleted: 0, currentRequestId: null },
+        ],
+      },
+      requests: {
+        fields: {
+          pickup: 'string',
+          dropoff: 'string',
+          fare: 'number',
+          status: { type: 'enum', values: ['pending', 'accepted', 'completed', 'declined', 'expired'] },
+          createdAt: 'number',
+        },
+      },
     });
+    log.info('driver online — waiting for requests');
 
     // Demand actor: generates requests every 8–16 s, expires unclaimed ones after 12 s.
     const demand = R.actor({
@@ -73,17 +89,6 @@ export const rideshare = {
       }, []);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      var [e, setE] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setE); }, []);
-      return e;
-    }
-
     function acceptRide(request) {
       db.update('driver',   'me',         { status: 'on_ride', currentRequestId: request.id });
       db.update('requests', request.id,   { status: 'accepted', acceptedAt: clock.now() });
@@ -108,8 +113,6 @@ export const rideshare = {
     function RideShare() {
       var driver   = useDriver();
       var requests = useRequests();
-      var cs       = useClock();
-      var entries  = useLog();
 
       useEffect(function () {
         demand.start(); clock.play();
@@ -138,14 +141,7 @@ export const rideshare = {
       };
 
       return h('div', { style: S.page },
-        // Header
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
-          h('strong', { style: { fontSize: 18 } }, 'Driver'),
-          h('div', { style: { display: 'flex', gap: 6 } },
-            h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-            h('button', { style: S.cb, onClick: function () { clock.fastForward(10000); } }, '+10s'),
-          ),
-        ),
+        h('strong', { style: { fontSize: 18, display: 'block', marginBottom: 14 } }, 'Driver'),
         // Stats
         h('div', { style: Object.assign({}, S.card, { display: 'flex', gap: 20 }) },
           h('div', null,
@@ -196,12 +192,6 @@ export const rideshare = {
               h('span', { style: { color: '#9ca3af', marginRight: 8 } }, '$' + r.fare),
               r.pickup + ' → ' + r.dropoff,
             );
-          }),
-        ),
-        // Log
-        h('div', { style: { fontSize: 12, color: '#6b7280' } },
-          entries.slice().reverse().slice(0, 4).map(function (e, i) {
-            return h('div', { key: i }, (e.t / 1000).toFixed(0) + 's  ' + e.msg);
           }),
         ),
       );

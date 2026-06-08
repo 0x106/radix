@@ -22,22 +22,31 @@ export const booking = {
       '14:00', '15:00', '16:00', '17:00',
     ];
 
-    db.__seed(function (api) {
-      SLOT_TIMES.forEach(function (t, i) {
-        // Pre-book a couple of slots so the grid isn't empty
-        var taken = i === 1 || i === 4;
-        api.create('slots', { id: 'slot-' + i, time: t, available: !taken });
-        if (taken) {
-          api.create('bookings', {
-            slotId: 'slot-' + i, time: t,
-            name: i === 1 ? 'Alice Johnson' : 'Bob Smith',
-            email: i === 1 ? 'alice@example.com' : 'bob@example.com',
-            confirmedAt: 0,
-          });
-        }
-      });
-      log.info('9 time slots loaded');
+    db.define({
+      slots: {
+        fields: {
+          time: 'string',
+          available: 'boolean',
+        },
+        seed: SLOT_TIMES.map(function (t, i) {
+          return { id: 'slot-' + i, time: t, available: i !== 1 && i !== 4 };
+        }),
+      },
+      bookings: {
+        fields: {
+          slotId: { type: 'ref', collection: 'slots' },
+          time: 'string',
+          name: 'string',
+          email: 'string',
+          confirmedAt: 'number',
+        },
+        seed: [
+          { slotId: 'slot-1', time: '10:00', name: 'Alice Johnson', email: 'alice@example.com', confirmedAt: 0 },
+          { slotId: 'slot-4', time: '13:00', name: 'Bob Smith',     email: 'bob@example.com',   confirmedAt: 0 },
+        ],
+      },
     });
+    log.info('9 time slots loaded');
 
     function useSlots() {
       var [rows, setRows] = useState(function () {
@@ -61,22 +70,9 @@ export const booking = {
       }, []);
       return rows;
     }
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () { return clock.subscribe(function (n, r) { setS({ now: n, running: r }); }); }, []);
-      return s;
-    }
-    function useLog() {
-      var [e, setE] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setE); }, []);
-      return e;
-    }
-
     function Booking() {
       var slots    = useSlots();
       var bookings = useBookings();
-      var cs       = useClock();
-      var entries  = useLog();
 
       var [selected, setSelected] = useState(null); // slot row
       var [name,     setName]     = useState('');
@@ -122,13 +118,7 @@ export const booking = {
       };
 
       return h('div', { style: S.page },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
-          h('h1', { style: { fontSize: 22, fontWeight: 700, margin: 0 } }, 'Book a slot'),
-          h('div', { style: { display: 'flex', gap: 6 } },
-            h('button', { style: S.cb, onClick: function () { cs.running ? clock.pause() : clock.play(); } }, cs.running ? 'Pause' : 'Play'),
-            h('button', { style: S.cb, onClick: function () { clock.fastForward(1000); } }, '+1s'),
-          ),
-        ),
+        h('h1', { style: { fontSize: 22, fontWeight: 700, margin: '0 0 16px' } }, 'Book a slot'),
         // Slot grid
         h('div', { style: S.card },
           h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 10 } }, 'Today'),
@@ -174,12 +164,6 @@ export const booking = {
               h('span', null, b.time + '  ' + b.name),
               h('span', { style: { color: '#9ca3af', fontSize: 12 } }, b.email),
             );
-          }),
-        ),
-        // Activity
-        entries.length > 0 && h('div', { style: { fontSize: 12, color: '#6b7280' } },
-          entries.slice().reverse().slice(0, 3).map(function (e, i) {
-            return h('div', { key: i }, (e.t / 1000).toFixed(0) + 's  ' + e.msg);
           }),
         ),
       );

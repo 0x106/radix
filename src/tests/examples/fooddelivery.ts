@@ -28,28 +28,58 @@ export const fooddelivery = {
     const db = R.db, events = R.events, clock = R.clock, log = R.log, random = R.random;
 
     // --- seed ----------------------------------------------------------------
-    db.__seed(function (api) {
-      api.create('restaurants', { id: 'r1', name: 'Burger Palace',  cuisine: 'American', rating: 4.3, deliveryMins: 25 });
-      api.create('restaurants', { id: 'r2', name: 'Sushi Garden',   cuisine: 'Japanese', rating: 4.7, deliveryMins: 35 });
-      api.create('restaurants', { id: 'r3', name: 'Pasta Bella',    cuisine: 'Italian',  rating: 4.5, deliveryMins: 30 });
-
-      [
-        { id: 'm1', restaurantId: 'r1', name: 'Classic Burger',      price: 12.99 },
-        { id: 'm2', restaurantId: 'r1', name: 'Cheeseburger',        price: 13.99 },
-        { id: 'm3', restaurantId: 'r1', name: 'Fries',               price:  4.99 },
-        { id: 'm4', restaurantId: 'r2', name: 'Salmon Nigiri (x2)',  price:  8.99 },
-        { id: 'm5', restaurantId: 'r2', name: 'Tuna Roll',           price: 10.99 },
-        { id: 'm6', restaurantId: 'r2', name: 'Miso Soup',           price:  3.99 },
-        { id: 'm7', restaurantId: 'r3', name: 'Spaghetti Carbonara', price: 14.99 },
-        { id: 'm8', restaurantId: 'r3', name: 'Margherita Pizza',    price: 13.99 },
-        { id: 'm9', restaurantId: 'r3', name: 'Tiramisu',            price:  7.99 },
-      ].forEach(function (item) { api.create('menu_items', item); });
-
-      api.create('drivers', { id: 'd1', name: 'Alex', status: 'available', currentOrderId: null });
-      api.create('drivers', { id: 'd2', name: 'Sam',  status: 'available', currentOrderId: null });
-
-      log.info('3 restaurants, 2 drivers online');
+    db.define({
+      restaurants: {
+        fields: {
+          name: 'string',
+          cuisine: 'string',
+          rating: 'number',
+          deliveryMins: 'number',
+        },
+        seed: [
+          { id: 'r1', name: 'Burger Palace', cuisine: 'American', rating: 4.3, deliveryMins: 25 },
+          { id: 'r2', name: 'Sushi Garden',  cuisine: 'Japanese', rating: 4.7, deliveryMins: 35 },
+          { id: 'r3', name: 'Pasta Bella',   cuisine: 'Italian',  rating: 4.5, deliveryMins: 30 },
+        ],
+      },
+      menu_items: {
+        fields: {
+          restaurantId: { type: 'ref', collection: 'restaurants' },
+          name: 'string',
+          price: 'number',
+        },
+        seed: [
+          { id: 'm1', restaurantId: 'r1', name: 'Classic Burger',      price: 12.99 },
+          { id: 'm2', restaurantId: 'r1', name: 'Cheeseburger',        price: 13.99 },
+          { id: 'm3', restaurantId: 'r1', name: 'Fries',               price:  4.99 },
+          { id: 'm4', restaurantId: 'r2', name: 'Salmon Nigiri (x2)',  price:  8.99 },
+          { id: 'm5', restaurantId: 'r2', name: 'Tuna Roll',           price: 10.99 },
+          { id: 'm6', restaurantId: 'r2', name: 'Miso Soup',           price:  3.99 },
+          { id: 'm7', restaurantId: 'r3', name: 'Spaghetti Carbonara', price: 14.99 },
+          { id: 'm8', restaurantId: 'r3', name: 'Margherita Pizza',    price: 13.99 },
+          { id: 'm9', restaurantId: 'r3', name: 'Tiramisu',            price:  7.99 },
+        ],
+      },
+      drivers: {
+        fields: {
+          name: 'string',
+          status: { type: 'enum', values: ['available', 'on_delivery'] },
+          currentOrderId: 'string',
+        },
+        seed: [
+          { id: 'd1', name: 'Alex', status: 'available', currentOrderId: null },
+          { id: 'd2', name: 'Sam',  status: 'available', currentOrderId: null },
+        ],
+      },
+      orders: {
+        fields: {
+          restaurantId: { type: 'ref', collection: 'restaurants' },
+          status: { type: 'enum', values: ['pending', 'accepted', 'preparing', 'ready', 'picked_up', 'delivered'] },
+          total: 'number',
+        },
+      },
     });
+    log.info('3 restaurants, 2 drivers online');
 
     // --- Restaurant actor ----------------------------------------------------
     // Purely reactive. Receives 'order:placed' and walks the order through its
@@ -139,20 +169,6 @@ export const fooddelivery = {
       return rows;
     }
 
-    function useClock() {
-      var [s, setS] = useState({ now: clock.now(), running: clock.isRunning() });
-      useEffect(function () {
-        return clock.subscribe(function (now, running) { setS({ now: now, running: running }); });
-      }, []);
-      return s;
-    }
-
-    function useLog() {
-      var [entries, setEntries] = useState(log.entries());
-      useEffect(function () { return log.subscribe(setEntries); }, []);
-      return entries;
-    }
-
     // --- order status helpers ------------------------------------------------
     var STEPS = ['placed', 'accepted', 'preparing', 'ready', 'picked_up', 'delivered'];
     var STEP_LABEL = {
@@ -177,10 +193,6 @@ export const fooddelivery = {
       section:  { padding: '16px 20px' },
       btn:      { border: 'none', borderRadius: 8, padding: '10px 18px',
                   cursor: 'pointer', fontSize: 14, fontWeight: 600 },
-      ctrlBtn:  { border: '1px solid #e5e5e5', background: '#fff', borderRadius: 8,
-                  padding: '5px 10px', cursor: 'pointer', fontSize: 12 },
-      clockBar: { padding: '8px 20px', background: '#fff', borderBottom: '1px solid #f5f5f5',
-                  display: 'flex', gap: 6, alignItems: 'center' },
       ghost:    { border: 'none', background: 'transparent', cursor: 'pointer',
                   fontSize: 13, color: '#6b7280', padding: '4px 0' },
     };
@@ -192,8 +204,6 @@ export const fooddelivery = {
     function FoodDelivery() {
       var restaurants = useRestaurants();
       var orders      = useOrders();
-      var cs          = useClock();
-      var logEntries  = useLog();
 
       var [screen,           setScreen]           = useState('browse');
       var [activeRestaurant, setActiveRestaurant] = useState(null);
@@ -238,19 +248,6 @@ export const fooddelivery = {
         setScreen('tracking');
       }
 
-      // Clock bar — shown on every screen
-      var clockBar = h('div', { style: S.clockBar },
-        h('span', { style: { fontSize: 11, color: '#9ca3af', flex: 1 } },
-          'sim ' + (cs.now / 1000).toFixed(0) + 's  ' + (cs.running ? '●' : '⏸')),
-        h('button', { style: S.ctrlBtn,
-          onClick: function () { cs.running ? clock.pause() : clock.play(); } },
-          cs.running ? 'Pause' : 'Play'),
-        h('button', { style: S.ctrlBtn,
-          onClick: function () { clock.step(5000); } }, '+5s'),
-        h('button', { style: S.ctrlBtn,
-          onClick: function () { clock.fastForward(30000); } }, '+30s'),
-      );
-
       // ---- Browse screen ----------------------------------------------------
       if (screen === 'browse') {
         return h('div', { style: S.page },
@@ -262,7 +259,6 @@ export const fooddelivery = {
                 onClick: function () { setScreen('tracking'); },
               }, 'Track order'),
           ),
-          clockBar,
           h('div', { style: S.section },
             restaurants.map(function (r) {
               return h('div', { key: r.id, style: S.card },
@@ -297,7 +293,6 @@ export const fooddelivery = {
             h('button', { style: S.ghost, onClick: function () { setScreen('browse'); setCart([]); } }, '← Back'),
             h('h1', { style: Object.assign({}, S.title, { fontSize: 17 }) }, activeRestaurant.name),
           ),
-          clockBar,
           h('div', { style: S.section },
             menuItems.map(function (item) {
               var qty = cart.filter(function (c) { return c.id === item.id; }).length;
@@ -336,7 +331,6 @@ export const fooddelivery = {
       if (!order) {
         return h('div', { style: S.page },
           h('div', { style: S.header }, h('h1', { style: S.title }, 'Order')),
-          clockBar,
           h('div', { style: Object.assign({}, S.section, { textAlign: 'center', color: '#9ca3af', paddingTop: 40 }) },
             h('p', null, 'No orders yet.'),
             h('button', { style: primaryBtn({ marginTop: 8 }), onClick: function () { setScreen('browse'); } },
@@ -352,7 +346,6 @@ export const fooddelivery = {
           h('button', { style: S.ghost, onClick: function () { setScreen('browse'); } }, '← Browse'),
           h('h1', { style: Object.assign({}, S.title, { fontSize: 17 }) }, order.restaurantName),
         ),
-        clockBar,
         h('div', { style: S.section },
 
           // Status headline
@@ -399,20 +392,7 @@ export const fooddelivery = {
             ),
           ),
 
-          // Activity log
-          h('div', null,
-            h('div', { style: { fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 } }, 'Activity'),
-            logEntries.length === 0
-              ? h('span', { style: { fontSize: 12, color: '#9ca3af' } }, 'No activity yet.')
-              : logEntries.slice().reverse().slice(0, 6).map(function (e, i) {
-                  return h('div', { key: i, style: { fontSize: 12, color: '#6b7280', padding: '2px 0' } },
-                    h('span', { style: { color: '#9ca3af', marginRight: 8 } }, (e.t / 1000).toFixed(0) + 's'),
-                    e.msg,
-                  );
-                }),
-          ),
-
-          order.status === 'delivered' &&
+            order.status === 'delivered' &&
             h('button', {
               style: primaryBtn({ width: '100%', padding: 14, marginTop: 16 }),
               onClick: function () { setScreen('browse'); },
