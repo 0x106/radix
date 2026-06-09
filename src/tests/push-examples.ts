@@ -33,6 +33,7 @@ import { booking } from "./examples/booking";
 import { slackbot } from "./examples/slackbot";
 import { music } from "./examples/music";
 import { apidashboard } from "./examples/apidashboard";
+import { graph } from "./examples/graph";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
@@ -61,6 +62,8 @@ const examples = [
   { ...slackbot, wrap: wrapPrototype },
   { ...music, wrap: wrapPrototype },
   { ...apidashboard, wrap: wrapPrototype },
+  // batch 3: boundary cases
+  { ...graph, wrap: wrapPrototype },
 ];
 
 async function main() {

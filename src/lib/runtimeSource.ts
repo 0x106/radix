@@ -229,7 +229,12 @@ window.radix = (function () {
     }
     function matchWhere(row, where) {
       if (!where) { return true; }
-      for (var k in where) { if (row[k] !== where[k]) { return false; } }
+      for (var k in where) {
+        var cond = where[k];
+        if (cond && typeof cond === 'object' && Array.isArray(cond.in)) {
+          if (cond.in.indexOf(row[k]) < 0) { return false; }
+        } else if (row[k] !== cond) { return false; }
+      }
       return true;
     }
     function persist(c) {

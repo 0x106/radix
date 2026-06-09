@@ -51,6 +51,12 @@ What the apps actually needed, and what it tells us:
   with the plan's "generic engine covers ~80%, custom endpoints cover the rest"
   (`notes.md` §6). When that breaks, it should break toward an `api` custom
   endpoint, not a fatter `query`.
+  - _Update (graph example, app 44):_ BFS frontier expansion ("edges whose `from`
+    is any of these ids") finally broke equality-`where`. It broke toward a single
+    operator — `where: { field: { in: [...] } }` — not a custom endpoint, because
+    set-membership is a filter the store should answer, and there is no `api`
+    handle yet to escape to. This is the only operator; the next break should
+    still be argued toward `api`.
 - **`reset()` belongs on `db`** even though our store is in-memory. Habits' "Reset
   to seed" button and the determinism story both lean on it. The _seed itself_
   needs a home: in the example we used a non-contract `db.__seed(fn)` that the app
