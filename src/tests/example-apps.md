@@ -163,6 +163,46 @@
 
 ---
 
+## Batch 3 — boundary cases (genuinely hard)
+
+41. **Spreadsheet with formula engine.** Cells as rows in the db; formulas stored as data; a
+    dependency DAG evaluated in topological order; circular reference detection. Stresses
+    pure-compute in a way nothing else does — the formula evaluator is real code, not a fake.
+    Also forces multi-user: two simulated collaborators editing the same sheet force live cell
+    invalidation and re-evaluation across the dependency graph. The hardest combination of
+    pure-compute + schema depth + simulated collaboration.
+
+42. **Event-sourced financial ledger.** Append-only: the db holds events (debit, credit, transfer),
+    never updated rows. Current balance is always derived by replay. Stresses whether the data
+    foundation can support a non-mutable pattern at all — `update` and `delete` are never called.
+    Forces a snapshot/checkpoint mechanism so replay doesn't read the full history every time.
+    Also a serious db schema case: how do you define a collection whose rows are immutable by
+    contract, and how do you query derived aggregates efficiently?
+
+43. **Real-time strategy / tower-defence game.** Hundreds of entities (units, buildings, projectiles,
+    enemies) each with position, health, state, and per-tick behaviour. Pathfinding (A\* or flow
+    fields), attack resolution, resource drain, wave spawning. No database — all state lives in
+    memory and is rebuilt on reload from a seed. Stresses the frame-loop spine at scale: the 60fps
+    tick with hundreds of actors is the hardest concurrency case in the system. Also stresses the
+    world-simulator as an adversarial AI rather than a cooperative one.
+
+44. **Property-graph explorer (knowledge graph / org chart).** Nodes and edges are first-class db
+    entities; the interesting queries are traversals — neighbours, shortest path, connected
+    components, centrality. Forces the db to handle graph-shaped data within its relational model
+    (or surfaces exactly where it breaks). The UI is a force-directed graph, live-updating as edges
+    are added. Stresses the query model more than any other example: recursive/multi-hop lookups
+    that a simple `query(collection, filter)` can't express.
+
+45. **LLM / AI agent pipeline builder.** A node-graph workflow tool: each node is an AI step
+    (prompt, extractor, classifier, router, tool call). The model calls are faked — the simulator
+    returns plausible canned responses with realistic latency and occasional failures. Stresses the
+    graceful-degradation / stub design most directly: every interesting behaviour is behind a fake.
+    Also forces the pipeline spine (data flows forward through nodes, not in response to user input)
+    and the question of what "running" an AI prototype even means — streaming tokens, retries,
+    cost tracking, partial results on failure.
+
+---
+
 ## What the set is designed to cover
 
 Across the 40, the axes (notes §4) are exercised roughly as: **viewport** ~24, with the rest split
