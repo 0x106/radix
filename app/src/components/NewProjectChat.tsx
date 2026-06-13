@@ -28,6 +28,8 @@ type ChatEntry =
 interface NewProjectChatProps {
   /** Client-generated id the new project will be created under. */
   projectId: string;
+  /** If set, the new project is assigned to this workspace on creation. */
+  workspaceId?: string;
   user: User;
   onComplete: (projectId: string) => void;
   onCancel: () => void;
@@ -69,6 +71,7 @@ function toWire(entries: ChatEntry[]) {
 
 export function NewProjectChat({
   projectId,
+  workspaceId,
   user,
   onComplete,
   onCancel,
@@ -96,7 +99,7 @@ export function NewProjectChat({
       const res = await fetch("/api/init-project", {
         method: "POST",
         headers: apiHeaders(user),
-        body: JSON.stringify({ projectId, messages: toWire(next) }),
+        body: JSON.stringify({ projectId, workspaceId, messages: toWire(next) }),
       });
 
       const data = await res.json();

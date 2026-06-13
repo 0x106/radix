@@ -17,6 +17,19 @@ const _schema = i.schema({
     projects: i.entity({
       name: i.string().indexed(),
       description: i.string().optional(),
+      // The prototype's component source (browser ESM). Stored so the edit agent
+      // can load and rewrite it; the rendered HTML bundle lives in Storage.
+      source: i.string().optional(),
+      // Name of a curated Lucide icon (see lib/icons). Falls back to a default.
+      icon: i.string().optional(),
+      createdAt: i.number().indexed(),
+    }),
+    // A named collection of projects, owned by a user. A project belongs to at
+    // most one workspace; projects with none are shown as "Unassigned".
+    workspaces: i.entity({
+      name: i.string().indexed(),
+      // Name of a curated Lucide icon (see lib/icons). Falls back to a default.
+      icon: i.string().optional(),
       createdAt: i.number().indexed(),
     }),
     // A user's token wallet. One-to-one with $users. All writes happen
@@ -55,6 +68,16 @@ const _schema = i.schema({
     projectBundle: {
       forward: { on: "projects", has: "one", label: "bundle" },
       reverse: { on: "$files", has: "one", label: "project", onDelete: "cascade" },
+    },
+    workspaceOwner: {
+      forward: { on: "workspaces", has: "one", label: "owner", onDelete: "cascade" },
+      reverse: { on: "$users", has: "many", label: "workspaces" },
+    },
+    // A project belongs to at most one workspace. No cascade: deleting a
+    // workspace just unlinks its projects (they become "Unassigned").
+    projectWorkspace: {
+      forward: { on: "projects", has: "one", label: "workspace" },
+      reverse: { on: "workspaces", has: "many", label: "projects" },
     },
     accountOwner: {
       forward: { on: "accounts", has: "one", label: "owner", onDelete: "cascade" },

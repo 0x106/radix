@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ProjectFrame } from "@/components/ProjectFrame";
 import { NewProjectChat } from "@/components/NewProjectChat";
+import { EditProjectChat } from "@/components/EditProjectChat";
 import {
   SidebarInset,
   SidebarProvider,
@@ -272,13 +273,42 @@ function ConsolePanel({
   );
 }
 
+// The dashboard links back with ?project=<id> or ?new=1[&workspace=<id>].
+// Read those once for the initial view. (This component only mounts on the
+// client, after auth resolves, so reading window here is safe.)
+function readInitialView(): {
+  selectedId: string | null;
+  creatingId: string | null;
+  creatingWorkspaceId: string | undefined;
+} {
+  const blank = { selectedId: null, creatingId: null, creatingWorkspaceId: undefined };
+  if (typeof window === "undefined") return blank;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("new")) {
+    return {
+      selectedId: null,
+      creatingId: id(),
+      creatingWorkspaceId: params.get("workspace") ?? undefined,
+    };
+  }
+  return { ...blank, selectedId: params.get("project") };
+}
+
 export function AppShell({ user }: { user: User }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [initialView] = useState(readInitialView);
+  const [selectedId, setSelectedId] = useState<string | null>(initialView.selectedId);
   // When set, the iframe area is replaced by the new-project chat. The id is
   // generated up front so the agent can create the project under it.
-  const [creatingId, setCreatingId] = useState<string | null>(null);
+  const [creatingId, setCreatingId] = useState<string | null>(initialView.creatingId);
+  // The workspace a new project should be created in, if any.
+  const [creatingWorkspaceId, setCreatingWorkspaceId] = useState<string | undefined>(
+    initialView.creatingWorkspaceId
+  );
   const [showDb, setShowDb] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  // Bumped after each successful edit to remount the iframe with fresh bundle.
+  const [editNonce, setEditNonce] = useState(0);
   const [dbData, setDbData] = useState<DbDump | null>(null);
   const [dbSchema, setDbSchema] = useState<DbSchema | null>(null);
   const [clockNow, setClockNow] = useState(0);
@@ -290,11 +320,25 @@ export function AppShell({ user }: { user: User }) {
     projects: {
       $: { order: { createdAt: "desc" } },
       bundle: {},
+      workspace: {},
+    },
+    workspaces: {
+      $: { order: { createdAt: "asc" } },
     },
   });
 
   const projects = data?.projects ?? [];
+  const workspaces = data?.workspaces ?? [];
   const selected = projects.find((p) => p.id === selectedId) ?? null;
+
+  // The initial view was derived from the URL params (see readInitialView);
+  // strip them now so a refresh doesn't re-trigger the same action.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("project") || params.get("new")) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   const send = useCallback((msg: object) => {
     iframeRef.current?.contentWindow?.postMessage(msg, "*");
@@ -362,13 +406,22 @@ export function AppShell({ user }: { user: User }) {
   const handleSelect = (projectId: string) => {
     setCreatingId(null);
     setSelectedId(projectId);
+    setShowEdit(false);
     resetInspectors();
   };
 
-  const handleNewProject = () => {
+  const handleNewProject = (workspaceId?: string) => {
     setShowDb(false);
     setShowConsole(false);
+    setShowEdit(false);
+    setCreatingWorkspaceId(workspaceId);
     setCreatingId(id());
+  };
+
+  const handleEdited = () => {
+    // Remount the preview iframe and clear any stale inspector data.
+    setEditNonce((n) => n + 1);
+    resetInspectors();
   };
 
   const handleCreated = (projectId: string) => {
@@ -382,9 +435,11 @@ export function AppShell({ user }: { user: User }) {
     <SidebarProvider>
       <AppSidebar
         projects={projects}
+        workspaces={workspaces}
         selectedId={creatingId ? null : selectedId}
         onSelect={handleSelect}
         onNewProject={handleNewProject}
+        userId={user.id}
         userEmail={user.email ?? undefined}
       />
       <SidebarInset className="h-screen overflow-hidden">
@@ -395,6 +450,16 @@ export function AppShell({ user }: { user: User }) {
           </span>
           {selected && !creatingId && (
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowEdit((v) => !v)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  showEdit
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Edit
+              </button>
               <button
                 onClick={handleToggleConsole}
                 className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -422,12 +487,28 @@ export function AppShell({ user }: { user: User }) {
           {creatingId ? (
             <NewProjectChat
               projectId={creatingId}
+              workspaceId={creatingWorkspaceId}
               user={user}
               onComplete={handleCreated}
               onCancel={() => setCreatingId(null)}
             />
           ) : (
-            <ProjectFrame ref={iframeRef} project={selected} />
+            <ProjectFrame
+              // Remount when the project changes or after an edit, so the iframe
+              // reloads the freshly-uploaded bundle.
+              key={`${selected?.id ?? "none"}:${selected?.bundle?.url ?? ""}:${editNonce}`}
+              ref={iframeRef}
+              project={selected}
+            />
+          )}
+          {!creatingId && selected && showEdit && (
+            <EditProjectChat
+              projectId={selected.id}
+              projectName={selected.name}
+              user={user}
+              onEdited={handleEdited}
+              onClose={() => setShowEdit(false)}
+            />
           )}
           {!creatingId && showConsole && (
             <ConsolePanel

@@ -1,0 +1,17 @@
+<svg
+  viewBox="0 0 256 256"
+  width="256"
+  height="256"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- Top-left to bottom-right diagonals -->
+  <line x1="72" y1="16"  x2="16" y2="72"  stroke="black" stroke-width="16" stroke-linecap="round"/>
+  <line x1="128" y1="16" x2 ="16" y2="128" stroke="black" stroke-width="16" stroke-linecap="round"/>
+  <line x1="184" y1="16" x2="16" y2="184" stroke="black" stroke-width="16" stroke-linecap="round"/>
+  <line x1="240" y1="16" x2="16" y2="240" stroke="black" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- Top-right to bottom-left diagonals -->
+  <line x1="240" y1="72"  x2="72" y2="240"  stroke="black" stroke-width="16" stroke-linecap="round"/>
+  <line x1="240" y1="128" x2="128" y2="240" stroke="black" stroke-width="16" stroke-linecap="round"/>
+  <line x1="240" y1="184" x2="184" y2="240" stroke="black" stroke-width="16" stroke-linecap="round"/>
+</svg>

@@ -18,6 +18,14 @@ const rules = {
       delete: "auth.id in data.ref('owner.id')",
     },
   },
+  workspaces: {
+    allow: {
+      view: "auth.id in data.ref('owner.id')",
+      create: "auth.id != null",
+      update: "auth.id in data.ref('owner.id')",
+      delete: "auth.id in data.ref('owner.id')",
+    },
+  },
   // Token wallets and the ledger are read-only to their owner. Every write goes
   // through the admin client in server routes, so the balance can't be forged.
   accounts: {
