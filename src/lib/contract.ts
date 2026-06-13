@@ -18,8 +18,12 @@
 /** A stored entity. Every row carries a string `id`; the rest is app-defined. */
 export type Entity = { id: string } & Record<string, unknown>;
 
-/** Filter passed to `db.query`. Equality-only for the example — see contract notes. */
-export type Where = Record<string, unknown>;
+/**
+ * Filter passed to `db.query`. Each key is matched by equality, or by set
+ * membership with `{ in: [...] }` — the single operator (added for the graph
+ * example's BFS frontier; see runtime-contract.md before adding more).
+ */
+export type Where = Record<string, unknown | { in: unknown[] }>;
 
 /** Ordering for `db.query`. One field, asc/desc — matches what the apps needed. */
 export type Order = { field: string; dir: "asc" | "desc" };
@@ -59,7 +63,36 @@ export interface Db {
   reset(): void;
   /** Return all collections and their rows — for inspection and debugging. */
   dump(): Record<string, Entity[]>;
+  /**
+   * Declare collections: field types (validated on create/update), defaults,
+   * seed rows (replayed on reset), and per-collection `immutable: true`
+   * (append-only — update/delete throw in strict mode, warn-refuse otherwise).
+   */
+  define(schema: SchemaDef, opts?: { strict?: boolean }): void;
+  /** The registered schema, as normalized by `define`. */
+  schema(): Record<string, unknown>;
 }
+
+/** Field declaration: shorthand type name or full spec. */
+export type FieldDef =
+  | "string" | "number" | "boolean" | "json" | "ref"
+  | {
+      type: string;
+      values?: string[];        // for enum
+      default?: unknown;
+      required?: boolean;
+      collection?: string;      // for ref
+    };
+
+export type SchemaDef = Record<
+  string,
+  {
+    fields?: Record<string, FieldDef>;
+    seed?: Record<string, unknown>[];
+    /** Append-only: rows may be created but never updated or deleted. */
+    immutable?: boolean;
+  }
+>;
 
 /** Unsubscribe handle returned by subscription calls. */
 export type Unsubscribe = () => void;
@@ -95,6 +128,13 @@ export interface Clock {
   setTimeout(fn: () => void, ms: number): () => void;
   /** Subscribe to clock state/tick changes (for console UIs). Returns unsubscribe. */
   subscribe(cb: (now: number, running: boolean) => void): Unsubscribe;
+  /**
+   * Per-animation-frame callback while the clock is playing: cb(simNow).
+   * For render loops (frame-loop spine). Game logic should still use
+   * `setTimeout` at a fixed simulated timestep so pause/step/fastForward
+   * replay deterministically.
+   */
+  onFrame(cb: (now: number) => void): Unsubscribe;
 }
 
 /**
@@ -205,6 +245,25 @@ export interface Actor {
  * Everything a Radix prototype can reach outside itself.
  * Exposed in the iframe as `window.radix`.
  */
+/** One declared real-vs-faked boundary. */
+export interface StubEntry {
+  name: string;
+  summary: string;
+  /** What the fake does NOT do that the real thing would. */
+  missing: string[];
+  fidelity: "faked" | "partial" | "canned";
+}
+
+/**
+ * The graceful-degradation hook (plan.md Phase 9). Prototypes declare what is
+ * faked or partial; the app and the shell can list the declarations to render
+ * an honest "what's real" panel.
+ */
+export interface Stub {
+  declare(name: string, info?: Partial<Omit<StubEntry, "name">>): StubEntry;
+  list(): StubEntry[];
+}
+
 export interface RadixRuntime {
   db: Db;
   events: Events;
@@ -215,6 +274,8 @@ export interface RadixRuntime {
   actor(config: ActorConfig): Actor;
   /** Simulated external service stubs. */
   services: Services;
+  /** Declare faked/partial functionality — the real-vs-faked boundary. */
+  stub: Stub;
 }
 
 declare global {

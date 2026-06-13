@@ -51,6 +51,8 @@ window.radix = (function () {
     var lastReal = 0;
     var timers = [];
     var subs = [];
+    var frameSubs = [];
+    var rafId = null;
     var TICK = 100;
     function notify() {
       var list = subs.slice();
@@ -75,6 +77,23 @@ window.radix = (function () {
       lastReal = r;
       advance(d);
     }
+    // Frame loop (frame-loop spine, plan Phase 8). The 100ms interval is fine
+    // for actors but makes timers fire in visible bursts; when a prototype
+    // registers an onFrame callback, a requestAnimationFrame loop drives the
+    // clock instead, so simulated time advances per frame and renders are
+    // smooth. Both drivers compute elapsed-since-last-call, so they coexist.
+    function frameLoop() {
+      if (rafId !== null || !running || !frameSubs.length) { return; }
+      if (typeof requestAnimationFrame !== 'function') { return; }
+      rafId = requestAnimationFrame(function () {
+        rafId = null;
+        if (!running) { return; }
+        onReal();
+        var list = frameSubs.slice();
+        for (var i = 0; i < list.length; i++) { try { list[i](nowMs); } catch (e) {} }
+        frameLoop();
+      });
+    }
     return {
       now: function () { return nowMs; },
       isRunning: function () { return running; },
@@ -83,6 +102,7 @@ window.radix = (function () {
         running = true; lastReal = Date.now();
         realTimer = setInterval(onReal, TICK);
         notify();
+        frameLoop();
       },
       pause: function () {
         if (!running) { return; }
@@ -100,6 +120,14 @@ window.radix = (function () {
       subscribe: function (cb) {
         subs.push(cb);
         return function () { var i = subs.indexOf(cb); if (i >= 0) { subs.splice(i, 1); } };
+      },
+      // Per-animation-frame callback while the clock is playing: cb(simNow).
+      // For render loops — game logic should still use setTimeout at a fixed
+      // simulated timestep so pause/step/fastForward replay deterministically.
+      onFrame: function (cb) {
+        frameSubs.push(cb);
+        frameLoop();
+        return function () { var i = frameSubs.indexOf(cb); if (i >= 0) { frameSubs.splice(i, 1); } };
       }
     };
   })();
@@ -282,10 +310,27 @@ window.radix = (function () {
         }
       }
     }
+    // Append-only collections: rows can be created, never changed or removed.
+    // Returns false when the write must be refused. Seed/reset replay runs
+    // suspended, and reset clears whole collections rather than deleting rows
+    // one-by-one, so immutability only constrains the app's own calls.
+    function blockIfImmutable(c, ctx) {
+      var cs = _schema[c];
+      if (!cs || !cs.immutable || suspend) { return true; }
+      var msg = 'db.' + ctx + '(' + c + '): collection is immutable (append-only)';
+      if (cs.strict) { throw new Error(msg); }
+      log.warn(msg);
+      return false;
+    }
     var api = {
       create: function (c, data) {
         var d = applyDefaults(c, data);
-        var id = (d && d.id) ? d.id : genId();
+        var id;
+        if (d && d.id) { id = d.id; }
+        else {
+          // skip generated ids already taken by explicit seed ids (e.g. 'e1')
+          do { id = genId(); } while (store[c] && store[c][id]);
+        }
         var ent = Object.assign({}, d, { id: id });
         validateData(c, ent, 'create');
         (store[c] || (store[c] = {}))[id] = ent;
@@ -294,6 +339,7 @@ window.radix = (function () {
         return ent;
       },
       update: function (c, id, patch) {
+        if (!blockIfImmutable(c, 'update')) { return undefined; }
         validateData(c, patch, 'update');
         var m = store[c] || (store[c] = {});
         var cur = m[id] || { id: id };
@@ -304,6 +350,7 @@ window.radix = (function () {
         return ent;
       },
       delete: function (c, id) {
+        if (!blockIfImmutable(c, 'delete')) { return; }
         var m = store[c];
         if (m) { delete m[id]; if (!suspend) { touched = true; } notify(c); persist(c); }
       },
@@ -360,7 +407,7 @@ window.radix = (function () {
           var fields = {};
           var rawFields = collDef.fields || {};
           for (var f in rawFields) { fields[f] = normalizeField(rawFields[f]); }
-          _schema[collName] = { fields: fields, strict: strict };
+          _schema[collName] = { fields: fields, strict: strict, immutable: !!collDef.immutable };
           var seedRows = collDef.seed || [];
           for (var i = 0; i < seedRows.length; i++) { api.create(collName, seedRows[i]); }
         }
@@ -541,6 +588,35 @@ window.radix = (function () {
     };
   }
 
+  // ---- stub — the graceful-degradation hook (plan Phase 9) -----------------
+  // A first-class way for a prototype to declare "this part is faked or
+  // partial, and here is what is missing". Declarations are queryable by the
+  // app (to render a what-is-real panel), logged once, and exposed to the
+  // shell over the bridge. Honesty about the real-vs-faked boundary is the
+  // product's core idea, so it gets an API, not a code comment.
+  var stub = (function () {
+    var entries = {};
+    return {
+      declare: function (name, info) {
+        info = info || {};
+        var first = !entries[name];
+        entries[name] = {
+          name: name,
+          summary: info.summary || '',
+          missing: info.missing || [],
+          fidelity: info.fidelity || 'faked'  // 'faked' | 'partial' | 'canned'
+        };
+        if (first) { log.warn('stub: ' + name + (info.summary ? ' — ' + info.summary : '')); }
+        return entries[name];
+      },
+      list: function () {
+        var out = [];
+        for (var k in entries) { out.push(entries[k]); }
+        return out;
+      }
+    };
+  })();
+
   // ---- shell message bridge -----------------------------------------------
   // Allows the Radix app shell to inspect and control the prototype from
   // outside the iframe via postMessage (cross-origin direct access is blocked).
@@ -563,17 +639,24 @@ window.radix = (function () {
       window.parent.postMessage({ type: 'radix:clock:state', now: clock.now(), running: clock.isRunning() }, '*');
     } else if (e.data.type === 'radix:log:get') {
       window.parent.postMessage({ type: 'radix:log:entries', entries: log.entries() }, '*');
+    } else if (e.data.type === 'radix:stubs') {
+      window.parent.postMessage({ type: 'radix:stubs:response', stubs: stub.list() }, '*');
     }
   });
 
-  // Push clock and log state to the shell whenever they change.
+  // Push clock and log state to the shell whenever they change. Throttled:
+  // with a frame loop active the clock notifies ~60x/sec, which would flood
+  // the shell; play/pause transitions always go through immediately.
+  var lastClockPush = -1, lastClockRunning = null;
   clock.subscribe(function (now, running) {
+    if (running === lastClockRunning && lastClockPush >= 0 && now - lastClockPush < 100) { return; }
+    lastClockPush = now; lastClockRunning = running;
     try { window.parent.postMessage({ type: 'radix:clock:state', now: now, running: running }, '*'); } catch (err) {}
   });
   log.subscribe(function (entries) {
     try { window.parent.postMessage({ type: 'radix:log:entries', entries: entries }, '*'); } catch (err) {}
   });
 
-  return { db: db, events: events, clock: clock, random: random, log: log, actor: actor, services: services };
+  return { db: db, events: events, clock: clock, random: random, log: log, actor: actor, services: services, stub: stub };
 })();
 `;

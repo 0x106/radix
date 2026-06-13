@@ -34,6 +34,10 @@ import { slackbot } from "./examples/slackbot";
 import { music } from "./examples/music";
 import { apidashboard } from "./examples/apidashboard";
 import { graph } from "./examples/graph";
+import { ledger } from "./examples/ledger";
+import { spreadsheet } from "./examples/spreadsheet";
+import { towerdefence } from "./examples/towerdefence";
+import { llmpipeline } from "./examples/llmpipeline";
 
 const ownerEmail = process.argv[2] ?? "jordan.evan.campbell@gmail.com";
 
@@ -64,6 +68,10 @@ const examples = [
   { ...apidashboard, wrap: wrapPrototype },
   // batch 3: boundary cases
   { ...graph, wrap: wrapPrototype },
+  { ...ledger, wrap: wrapPrototype },
+  { ...spreadsheet, wrap: wrapPrototype },
+  { ...towerdefence, wrap: wrapPrototype },
+  { ...llmpipeline, wrap: wrapPrototype },
 ];
 
 async function main() {
