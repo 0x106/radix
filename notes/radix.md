@@ -27,7 +27,7 @@ co-equal foundations:
    reset-to-seed. This is what habit trackers, dashboards, and shops are made of.
 2. **The world foundation** — a deterministic, steppable simulator that produces events over
    time: a clock, an event bus, seeded randomness, and stateful actors. This is what chat
-   bots, cron workers, games, and collaborative apps need — *something to react to*.
+   bots, cron workers, games, and collaborative apps need — _something to react to_.
 
 The world foundation is what separates Radix from a CRUD-to-UI generator. A prototype can use
 either foundation or both.
@@ -43,16 +43,24 @@ root). The implementation is `src/runtime/source.ts` — a hand-written, ES5-ish
 string that is inlined into the prototype's HTML so it runs inside the sandboxed iframe with
 no build step.
 
-| Handle | What it is |
-| --- | --- |
-| `db` | Schema-driven entity store. `define / create / update / delete / get / query / subscribe / reset / dump / schema`. Synchronous; `subscribe` fires immediately with current rows. Persisted to IndexedDB; `reset()` returns to the declared seed. |
-| `events` | Topic-based publish/subscribe bus for the world. |
-| `clock` | Simulated time. `now / play / pause / step / fastForward / setTimeout / onFrame`. All delayed work routes through here so it can be paused, stepped, and replayed. |
-| `random` | Seeded PRNG (`random / int / pick`). Same seed ⇒ same sequence. |
-| `log` | Simulation console log, stamped with simulated time; subscribable, capped at 2000 entries. |
-| `actor(config)` | A stateful, async-capable world process: optional `start`, timer `tick` (with jitter), and reactive `on` event handlers. |
-| `services` | Faked external services (`email`, `payment`, `sms`); their delays honour the simulated clock. |
-| `stub` | The graceful-degradation hook: declare what is faked/partial so the UI can show an honest "what's real" panel. |
+| Handle          | What it is                                                                        |
+| --------------- | --------------------------------------------------------------------------------- |
+| `db`            | Schema-driven entity store. `define / create / update / delete / get / query      |
+|                 | / subscribe / reset / dump / schema`. Synchronous; `subscribe` fires              |
+|                 | immediately with current rows. Persisted to IndexedDB; `reset()` returns          |
+|                 | to the declared seed.                                                             |
+| `events`        | Topic-based publish/subscribe bus for the world.                                  |
+| `clock`         | Simulated time. `now / play / pause / step / fastForward / setTimeout / onFrame`. |
+|                 | All delayed work routes through here so it can be paused, stepped, and replayed.  |
+| `random`        | Seeded PRNG (`random / int / pick`). Same seed ⇒ same sequence.                   |
+| `log`           | Simulation console log, stamped with simulated time; subscribable, capped at      |
+|                 | 2000 entries.                                                                     |
+| `actor(config)` | A stateful, async-capable world process: optional `start`, timer `tick` (with     |
+|                 | jitter), and reactive `on` event handlers.                                        |
+| `services`      | Faked external services (`email`, `payment`, `sms`); their delays honour the      |
+|                 | simulated clock.                                                                  |
+| `stub`          | The graceful-degradation hook: declare what is faked/partial so the UI can show   |
+|                 | an honest "what's real" panel.                                                    |
 
 ### Determinism is the core guarantee
 
@@ -115,4 +123,4 @@ token bypasses permission rules and is for local tooling only.
 in Node (memory-only, no IndexedDB) and asserts the core contract: determinism, reset-replay,
 immutability, query semantics, strict validation, the locked-down bridge, the determinism
 scope, and that every example in `src/tests/examples/` parses under the packaging wrapper.
-`npm run push-examples` is the live smoke test that publishes the examples to a Radix account.
+`npm run push-examples` publishes the examples to a Radix account.

@@ -19,6 +19,33 @@ const _schema = i.schema({
       description: i.string().optional(),
       createdAt: i.number().indexed(),
     }),
+    // A user's token wallet. One-to-one with $users. All writes happen
+    // server-side via the admin client (see lib/billing.ts); clients only read.
+    accounts: i.entity({
+      // Current spendable token balance. Debited per model call, credited by
+      // Stripe purchases/subscriptions and the one-time free grant.
+      tokenBalance: i.number().indexed(),
+      stripeCustomerId: i.string().optional().indexed(),
+      stripeSubscriptionId: i.string().optional(),
+      // undefined / "active" / "canceled" — mirrors the Stripe subscription.
+      subscriptionStatus: i.string().optional(),
+      // True once the signup free grant has been applied (idempotency guard).
+      freeGrantApplied: i.boolean(),
+      createdAt: i.number().indexed(),
+    }),
+    // Append-only audit trail of every balance change. For Stripe credits the
+    // originating event id is recorded in `stripeEventId`; the webhook skips an
+    // event whose id already appears here, making processing idempotent.
+    ledgerEntries: i.entity({
+      delta: i.number(),
+      // "grant" | "purchase" | "subscription" | "build"
+      reason: i.string().indexed(),
+      createdAt: i.number().indexed(),
+      // Stripe event id for purchase/subscription credits; absent otherwise.
+      stripeEventId: i.string().optional().indexed(),
+      // Free-form context: openai usage for builds, stripe ids for purchases.
+      meta: i.json().optional(),
+    }),
   },
   links: {
     projectOwner: {
@@ -28,6 +55,14 @@ const _schema = i.schema({
     projectBundle: {
       forward: { on: "projects", has: "one", label: "bundle" },
       reverse: { on: "$files", has: "one", label: "project", onDelete: "cascade" },
+    },
+    accountOwner: {
+      forward: { on: "accounts", has: "one", label: "owner", onDelete: "cascade" },
+      reverse: { on: "$users", has: "one", label: "account" },
+    },
+    accountLedger: {
+      forward: { on: "ledgerEntries", has: "one", label: "account", onDelete: "cascade" },
+      reverse: { on: "accounts", has: "many", label: "ledger" },
     },
   },
   rooms: {},

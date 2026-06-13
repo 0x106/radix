@@ -46,8 +46,10 @@ export const ProjectFrame = forwardRef<
       // allow-scripts runs the bundle; allow-same-origin gives the frame a real
       // (storage) origin so the runtime's IndexedDB persistence works. The bundle
       // is served from the cross-origin InstantDB storage host, so this does NOT
-      // grant access to the Radix app's origin.
-      sandbox="allow-scripts allow-same-origin"
+      // grant access to the Radix app's origin. allow-forms lets prototypes use
+      // <form> elements without the browser hard-blocking submit events (apps
+      // should still preventDefault to avoid a frame-reloading navigation).
+      sandbox="allow-scripts allow-same-origin allow-forms"
       className="h-full w-full flex-1 border-0 bg-white"
     />
   );

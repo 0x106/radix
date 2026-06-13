@@ -1,6 +1,7 @@
 "use client";
 
-import { Boxes, LayoutGrid, LogOut } from "lucide-react";
+import Link from "next/link";
+import { Boxes, Coins, LayoutGrid, LogOut, Plus } from "lucide-react";
 import { db } from "@/lib/db";
 import type { InstaQLEntity } from "@instantdb/react";
 import type { AppSchema } from "@/instant.schema";
@@ -24,13 +25,19 @@ export function AppSidebar({
   projects,
   selectedId,
   onSelect,
+  onNewProject,
   userEmail,
 }: {
   projects: Project[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onNewProject: () => void;
   userEmail?: string;
 }) {
+  // Owner-scoped by permissions, so this returns just this user's wallet.
+  const { data: accountData } = db.useQuery({ accounts: {} });
+  const balance = accountData?.accounts?.[0]?.tokenBalance;
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -52,6 +59,23 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="New project"
+                  onClick={onNewProject}
+                  className="font-medium"
+                >
+                  <Plus />
+                  <span>New project</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           <SidebarGroupLabel>Projects</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -81,6 +105,22 @@ export function AppSidebar({
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip={balance === undefined ? "Tokens" : `${balance} tokens`}
+            >
+              <Link href="/billing">
+                <Coins />
+                <span className="flex-1 truncate">
+                  {balance === undefined ? "Tokens" : `${balance} tokens`}
+                </span>
+                <span className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+                  Buy
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Sign out"

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { User } from "@instantdb/react";
+import { id, type User } from "@instantdb/react";
 import { db } from "@/lib/db";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ProjectFrame } from "@/components/ProjectFrame";
+import { NewProjectChat } from "@/components/NewProjectChat";
 import {
   SidebarInset,
   SidebarProvider,
@@ -273,6 +274,9 @@ function ConsolePanel({
 
 export function AppShell({ user }: { user: User }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // When set, the iframe area is replaced by the new-project chat. The id is
+  // generated up front so the agent can create the project under it.
+  const [creatingId, setCreatingId] = useState<string | null>(null);
   const [showDb, setShowDb] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
   const [dbData, setDbData] = useState<DbDump | null>(null);
@@ -347,8 +351,7 @@ export function AppShell({ user }: { user: User }) {
     }
   };
 
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
+  const resetInspectors = () => {
     setDbData(null);
     setDbSchema(null);
     setClockNow(0);
@@ -356,21 +359,41 @@ export function AppShell({ user }: { user: User }) {
     setLogEntries([]);
   };
 
+  const handleSelect = (projectId: string) => {
+    setCreatingId(null);
+    setSelectedId(projectId);
+    resetInspectors();
+  };
+
+  const handleNewProject = () => {
+    setShowDb(false);
+    setShowConsole(false);
+    setCreatingId(id());
+  };
+
+  const handleCreated = (projectId: string) => {
+    // The live query will surface the new project; select it so it renders.
+    setCreatingId(null);
+    setSelectedId(projectId);
+    resetInspectors();
+  };
+
   return (
     <SidebarProvider>
       <AppSidebar
         projects={projects}
-        selectedId={selectedId}
+        selectedId={creatingId ? null : selectedId}
         onSelect={handleSelect}
+        onNewProject={handleNewProject}
         userEmail={user.email ?? undefined}
       />
       <SidebarInset className="h-screen overflow-hidden">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
           <SidebarTrigger />
           <span className="flex-1 text-sm font-medium">
-            {selected?.name ?? "Radix"}
+            {creatingId ? "New project" : selected?.name ?? "Radix"}
           </span>
-          {selected && (
+          {selected && !creatingId && (
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleToggleConsole}
@@ -396,8 +419,17 @@ export function AppShell({ user }: { user: User }) {
           )}
         </header>
         <div className="flex min-h-0 flex-1">
-          <ProjectFrame ref={iframeRef} project={selected} />
-          {showConsole && (
+          {creatingId ? (
+            <NewProjectChat
+              projectId={creatingId}
+              user={user}
+              onComplete={handleCreated}
+              onCancel={() => setCreatingId(null)}
+            />
+          ) : (
+            <ProjectFrame ref={iframeRef} project={selected} />
+          )}
+          {!creatingId && showConsole && (
             <ConsolePanel
               clockNow={clockNow}
               clockRunning={clockRunning}

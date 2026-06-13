@@ -18,6 +18,24 @@ const rules = {
       delete: "auth.id in data.ref('owner.id')",
     },
   },
+  // Token wallets and the ledger are read-only to their owner. Every write goes
+  // through the admin client in server routes, so the balance can't be forged.
+  accounts: {
+    allow: {
+      view: "auth.id in data.ref('owner.id')",
+      create: "false",
+      update: "false",
+      delete: "false",
+    },
+  },
+  ledgerEntries: {
+    allow: {
+      view: "auth.id in data.ref('account.owner.id')",
+      create: "false",
+      update: "false",
+      delete: "false",
+    },
+  },
   // $files perms cannot use data.ref; gate by path instead.
   // Bundles are uploaded under `projects/<ownerId>/<projectId>/index.html`.
   $files: {

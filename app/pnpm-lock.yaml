@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@instantdb/admin':
+        specifier: ^1.0.49
+        version: 1.0.49
       '@instantdb/react':
         specifier: ^1.0.43
         version: 1.0.43(react@19.2.4)
@@ -23,6 +26,9 @@ importers:
       next:
         specifier: 16.2.7
         version: 16.2.7(@babel/core@7.29.7)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      openai:
+        specifier: ^6.42.0
+        version: 6.42.0(zod@3.25.76)
       radix-ui:
         specifier: ^1.4.3
         version: 1.4.3(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -35,6 +41,9 @@ importers:
       shadcn:
         specifier: ^4.10.0
         version: 4.10.0(@types/node@20.19.41)(typescript@5.9.3)
+      stripe:
+        specifier: ^22.2.1
+        version: 22.2.1(@types/node@20.19.41)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -472,8 +481,18 @@ packages:
       '@types/node':
         optional: true
 
+  '@instantdb/admin@1.0.49':
+    resolution: {integrity: sha512-6Lkfrs+JIiBlVhZMf1wl5Z1KBagBWIbutLKRr7OZDrfbXiWcL9Uqv9v8haVsyjvk/eGfp1hHYgGRmOIx1yQlNA==}
+
   '@instantdb/core@1.0.43':
     resolution: {integrity: sha512-nbAnq5tpRwfFWguZa9A2wNq4M3Q3KGxK2uRnv2jYrtTwTxStyF8wRKjYPXjo3K4A+sGukHRowq7gAYEBbgIqXQ==}
+
+  '@instantdb/core@1.0.49':
+    resolution: {integrity: sha512-DigxsPBZIpn5cjadM7A3o9u1Tb7akZmJqEhaFsnOLxcW7Ewgu4em2CxJnV7A2tE7NoC/lkDE4RAOz7GlkXvbiA==}
+
+  '@instantdb/eventsource@4.1.0-2':
+    resolution: {integrity: sha512-k2uzhsRzdD7hzV3fv+eoCRNeluZcj4pDfUKKAhvIS6xshc7zHkaM9/m3vxBgaYoNVmvOyaGp84TcHG0/Bp7k4g==}
+    engines: {node: '>=20.0.0'}
 
   '@instantdb/react-common@1.0.43':
     resolution: {integrity: sha512-nBT+QoXUvaR/sB6EiWIj5sezBSGtDaSJdvhqvGUBK8nAg+4sPcnkpCtHiJ/qu8+gUB7RRNMViMvL2lvDQcMG9g==}
@@ -487,6 +506,12 @@ packages:
 
   '@instantdb/version@1.0.43':
     resolution: {integrity: sha512-KHQWieTNuP7E8T++HMzUehhERoAOMt0+FMyTtNHcsx/NKKo4DY3HXMtksmSZ+IScPtaD2ZmtTc35Jbd7Kjhnrg==}
+
+  '@instantdb/version@1.0.49':
+    resolution: {integrity: sha512-yP3qhO2U0TWyceY23uM5+t93gDYG58q2nRj5nOb5GertRkk3Yc90+xdSZl9Uw62eYctV3y7gvf5743bZK47fJQ==}
+
+  '@instantdb/webhooks@1.0.49':
+    resolution: {integrity: sha512-uY7jmr/ZKTGspndjnzqJbMMS8SKG4TmfNR3tCCi2VsX1QWC5SW0lBNWwybeJwOwDMOVsVb22lXGsCmfBfKEWFA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3047,6 +3072,17 @@ packages:
     resolution: {integrity: sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw==}
     engines: {node: '>=20'}
 
+  openai@6.42.0:
+    resolution: {integrity: sha512-1WFEt/uXMXOLhYRNkgJWo08Y2YNvNwpVU72K7ibrWgWpNOXd4VojXLbe6SQ4bLiUQ3Y8jz4IiyVkylJCL1DtZg==}
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
@@ -3471,6 +3507,15 @@ packages:
   strip-json-comments@3.1.1:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
+
+  stripe@22.2.1:
+    resolution: {integrity: sha512-ULAtq25USBEx3yeN5zimEkfYVFETVMP5om25Ryr8ol11P62imaCZLBIEW78T7zm7Wg3wnZi+80S72yf3LCpNhw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
@@ -4189,11 +4234,30 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.41
 
+  '@instantdb/admin@1.0.49':
+    dependencies:
+      '@instantdb/core': 1.0.49
+      '@instantdb/eventsource': 4.1.0-2
+      '@instantdb/version': 1.0.49
+      '@instantdb/webhooks': 1.0.49
+      cookie: 1.1.1
+      uuid: 11.1.1
+
   '@instantdb/core@1.0.43':
     dependencies:
       '@instantdb/version': 1.0.43
       mutative: 1.3.0
       uuid: 11.1.1
+
+  '@instantdb/core@1.0.49':
+    dependencies:
+      '@instantdb/version': 1.0.49
+      mutative: 1.3.0
+      uuid: 11.1.1
+
+  '@instantdb/eventsource@4.1.0-2':
+    dependencies:
+      eventsource-parser: 3.1.0
 
   '@instantdb/react-common@1.0.43(react@19.2.4)':
     dependencies:
@@ -4210,6 +4274,12 @@ snapshots:
       react: 19.2.4
 
   '@instantdb/version@1.0.43': {}
+
+  '@instantdb/version@1.0.49': {}
+
+  '@instantdb/webhooks@1.0.49':
+    dependencies:
+      '@instantdb/core': 1.0.49
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -6901,6 +6971,10 @@ snapshots:
       powershell-utils: 0.1.0
       wsl-utils: 0.3.1
 
+  openai@6.42.0(zod@3.25.76):
+    optionalDependencies:
+      zod: 3.25.76
+
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -7497,6 +7571,10 @@ snapshots:
   strip-final-newline@4.0.0: {}
 
   strip-json-comments@3.1.1: {}
+
+  stripe@22.2.1(@types/node@20.19.41):
+    optionalDependencies:
+      '@types/node': 20.19.41
 
   styled-jsx@5.1.6(@babel/core@7.29.7)(react@19.2.4):
     dependencies:
