@@ -57,6 +57,36 @@ What the apps actually needed, and what it tells us:
     set-membership is a filter the store should answer, and there is no `api`
     handle yet to escape to. This is the only operator; the next break should
     still be argued toward `api`.
+  - _Update (ledger example, app 42):_ the append-only pattern works on the
+    store as-is — the app simply never calls `update`/`delete` and derives
+    balances by replay (snapshot checkpoints and the fold are app code). But
+    "immutable by contract" was previously only convention, so `db.define` now
+    accepts a per-collection `immutable: true`: `update`/`delete` throw in
+    strict mode, warn-and-refuse otherwise. Seed/reset replay is exempt (it
+    rebuilds collections wholesale rather than mutating rows). This is the
+    write-side cousin of field-write-ownership (notes §6) — a narrower, easier
+    case, since the rule is "no writer at all" rather than "exactly one".
+  - _Update (spreadsheet example, app 41):_ needed nothing new. The formula
+    engine (parser, dependency DAG, cycle detection) is pure app code — the
+    pure-compute spine — and the simulated collaborators are ordinary actors
+    doing ordinary cell writes. Derived values are never stored; every change
+    re-evaluates the visible graph. Validates "the db holds inputs, code holds
+    derivations" at the hardest compute density we have.
+  - _Update (tower-defence example, app 43):_ needed `clock.onFrame`. The
+    clock's 100ms real-time driver makes timers fire in visible bursts —
+    unusable for a game render. `onFrame(cb)` runs a requestAnimationFrame
+    loop while the clock plays, advancing simulated time per frame. The
+    deterministic split: game logic ticks at a fixed simulated timestep via
+    `clock.setTimeout` (so console pause/step/fastForward govern the battle);
+    only rendering rides `onFrame`. Also: the example uses NO db at all — all
+    state is ephemeral memory rebuilt from seed, per the persistence tiers.
+  - _Update (LLM-pipeline example, app 45):_ needed the `stub` handle (Phase
+    9, previously absent). `stub.declare(name, { summary, missing, fidelity })`
+    + `stub.list()`, logged once and exposed to the shell via `radix:stubs`.
+    The rest of "running an AI app" decomposed onto existing handles: token
+    streaming is `clock.setTimeout` per token, failures are seeded random,
+    retries are app code, costs are estimates — so pause freezes mid-stream
+    and fastForward completes a run instantly, for free.
 - **`reset()` belongs on `db`** even though our store is in-memory. Habits' "Reset
   to seed" button and the determinism story both lean on it. The _seed itself_
   needs a home: in the example we used a non-contract `db.__seed(fn)` that the app
