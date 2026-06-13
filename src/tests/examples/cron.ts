@@ -110,9 +110,8 @@ export const cron = {
                 h('div', { style: { fontSize: 11, color: '#9ca3af', marginTop: 2 } },
                   'every ' + every + '  ·  runs: ' + j.runs + '  ·  last: ' + lastRan),
               );
-            }),
-          ),
-        ),
+            })
+          )
       );
     }
 

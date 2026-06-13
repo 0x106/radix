@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "push-examples": "tsx src/tests/push-examples.ts",
+    "test": "tsx src/tests/runtime.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

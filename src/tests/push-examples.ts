@@ -7,12 +7,12 @@
 // the Radix app at least once so their $users row exists.
 //
 // Two kinds of examples:
-//   - Smoke tests (counter, todo): plain React, wrapped with wrapReactApp.
-//   - Phase 0 examples (habits, chat, cron): exercise the window.radix runtime
-//     contract, wrapped with wrapPrototype (which installs the runtime shim).
+//   - Plain React (counter, todo): no fakes, wrapped with wrapReactApp.
+//   - Runtime examples (habits, chat, cron, …): use the window.radix runtime,
+//     wrapped with wrapPrototype (which installs the runtime).
 
-import { wrapReactApp, wrapPrototype } from "../lib/htmlTemplate";
-import { pushProject } from "../lib/pushProject";
+import { wrapReactApp, wrapPrototype } from "../runtime/packaging";
+import { pushProject } from "../publish/pushProject";
 import { counter } from "./examples/counter";
 import { todo } from "./examples/todo";
 import { habits } from "./examples/habits";

@@ -1,5 +1,5 @@
 import { id } from "@instantdb/admin";
-import { adminDb } from "./adminDb";
+import { adminDb } from "./instant";
 
 /**
  * Push a single self-contained HTML prototype to InstantDB as a `projects`

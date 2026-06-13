@@ -1,4 +1,4 @@
-// PHASE 0 EXAMPLE — read-heavy analytics: a personal finance dashboard.
+// read-heavy analytics: a personal finance dashboard.
 //
 // Purpose: stress the *query/aggregation* side of the fake `db` (example-apps.md
 // #3). Almost no writes — the point is a rich seeded dataset and lots of derived,
@@ -14,7 +14,7 @@
 export const finance = {
   name: "Finance dashboard (analytics example)",
   description:
-    "Phase 0 example: read-heavy analytics over a seeded transactions set — balances and roll-ups computed on the client.",
+    "Read-heavy analytics over a seeded transactions set — balances and roll-ups computed on the client.",
   source: /* js */ `
     const { useState, useEffect, useMemo } = React;
     const h = React.createElement;

@@ -1,22 +1,19 @@
-// Radix runtime shim — PHASE 0 EXAMPLE. THROWAWAY.
+// Radix runtime — the browser-JS implementation of the type surface in
+// ./types/. Authored as a source string because it has to run inside the
+// cross-origin, sandbox="allow-scripts" iframe alongside the prototype (it cannot
+// be imported from node_modules at runtime — same reason `wrapReactApp` inlines
+// its source). `wrapPrototype` (./packaging.ts) concatenates this BEFORE the
+// prototype's component source, so by the time the component runs, `window.radix`
+// exists.
 //
-// This is the browser-JS *implementation* of the contract in ./contract.ts,
-// authored as a source string because it has to run inside the cross-origin,
-// sandbox="allow-scripts" iframe alongside the prototype (it cannot be imported
-// from node_modules at runtime — same reason `wrapReactApp` inlines its source).
-// `wrapPrototype` (../htmlTemplate.ts) concatenates this BEFORE the prototype's
-// component source, so by the time the component runs, `window.radix` exists.
-//
-// Intentionally simple and hand-written — a single store (in-memory working set
-// persisted through to IndexedDB), a single event bus, a single steppable clock,
-// a seeded PRNG, a log, and one actor
-// primitive. It is NOT the generic store/simulator engine (Phases 2/3); its only
-// job is to make the prototype<->library contract visible so Phase 1 can freeze
-// the real thing. Style is ES5-ish on purpose to keep the inlined source robust.
+// Deliberately small and hand-written: one entity store (an in-memory working set
+// persisted through to IndexedDB), one event bus, one steppable clock, a seeded
+// PRNG, a log, the external-service stubs, and the actor primitive. Style is
+// ES5-ish on purpose to keep the inlined source robust across iframe targets.
 
 export const runtimeSource = /* js */ `
 window.radix = (function () {
-  // ---- seeded randomness (mulberry32) — notes.md §9 -----------------------
+  // ---- seeded randomness (mulberry32) -------------------------------------
   // Fixed default seed so reloads replay identically. Prototypes MUST use this,
   // never real Math.random(). We do NOT override Math.random globally: React's
   // CDN build may rely on it, and clobbering it risks breaking the renderer.
@@ -39,7 +36,7 @@ window.radix = (function () {
   }
   var random = makeRandom(SEED);
 
-  // ---- simulated clock — notes.md §9 --------------------------------------
+  // ---- simulated clock ----------------------------------------------------
   // Virtual time in ms. When "playing", a real interval maps real elapsed ms to
   // virtual ms 1:1; pause/step/fastForward give manual control. All scheduled
   // work routes through this, never the real setTimeout, so it is deterministic
@@ -58,12 +55,23 @@ window.radix = (function () {
       var list = subs.slice();
       for (var i = 0; i < list.length; i++) { try { list[i](nowMs, running); } catch (e) {} }
     }
+    // Timers are kept sorted by fire time on insert, so advance() never has to
+    // re-sort — it just shifts off the front while the head is due. A callback
+    // may schedule more timers as it runs; those are inserted in order, so the
+    // head stays correct without another full sort (this is what kept the old
+    // sort-every-iteration loop from scaling to hundreds of timers).
+    function insertTimer(t) {
+      var lo = 0, hi = timers.length;
+      while (lo < hi) {
+        var mid = (lo + hi) >> 1;
+        if (timers[mid].at <= t.at) { lo = mid + 1; } else { hi = mid; }
+      }
+      timers.splice(lo, 0, t);
+    }
     function advance(ms) {
       if (ms <= 0) { return; }
       var target = nowMs + ms;
-      while (true) {
-        timers.sort(function (a, b) { return a.at - b.at; });
-        if (!timers.length || timers[0].at > target) { break; }
+      while (timers.length && timers[0].at <= target) {
         var t = timers.shift();
         nowMs = t.at;
         if (!t.cancelled) { try { t.fn(); } catch (e) {} }
@@ -77,17 +85,24 @@ window.radix = (function () {
       lastReal = r;
       advance(d);
     }
-    // Frame loop (frame-loop spine, plan Phase 8). The 100ms interval is fine
-    // for actors but makes timers fire in visible bursts; when a prototype
-    // registers an onFrame callback, a requestAnimationFrame loop drives the
-    // clock instead, so simulated time advances per frame and renders are
-    // smooth. Both drivers compute elapsed-since-last-call, so they coexist.
+    // Exactly one real-time driver runs while playing. With onFrame subscribers a
+    // requestAnimationFrame loop drives the clock (smooth, per-frame); otherwise a
+    // coarse 100ms interval is enough for actors. We never run both at once.
+    function syncDrivers() {
+      if (!running || frameSubs.length) {
+        if (realTimer) { clearInterval(realTimer); realTimer = null; }
+      } else if (!realTimer) {
+        lastReal = Date.now();
+        realTimer = setInterval(onReal, TICK);
+      }
+      if (running && frameSubs.length) { frameLoop(); }
+    }
     function frameLoop() {
       if (rafId !== null || !running || !frameSubs.length) { return; }
       if (typeof requestAnimationFrame !== 'function') { return; }
       rafId = requestAnimationFrame(function () {
         rafId = null;
-        if (!running) { return; }
+        if (!running || !frameSubs.length) { return; }
         onReal();
         var list = frameSubs.slice();
         for (var i = 0; i < list.length; i++) { try { list[i](nowMs); } catch (e) {} }
@@ -100,21 +115,20 @@ window.radix = (function () {
       play: function () {
         if (running) { return; }
         running = true; lastReal = Date.now();
-        realTimer = setInterval(onReal, TICK);
         notify();
-        frameLoop();
+        syncDrivers();
       },
       pause: function () {
         if (!running) { return; }
         running = false;
-        if (realTimer) { clearInterval(realTimer); realTimer = null; }
+        syncDrivers();
         notify();
       },
       step: function (ms) { advance(ms); },
       fastForward: function (ms) { advance(ms); },
       setTimeout: function (fn, ms) {
         var t = { at: nowMs + Math.max(0, ms), fn: fn, cancelled: false };
-        timers.push(t);
+        insertTimer(t);
         return function () { t.cancelled = true; };
       },
       subscribe: function (cb) {
@@ -126,13 +140,16 @@ window.radix = (function () {
       // simulated timestep so pause/step/fastForward replay deterministically.
       onFrame: function (cb) {
         frameSubs.push(cb);
-        frameLoop();
-        return function () { var i = frameSubs.indexOf(cb); if (i >= 0) { frameSubs.splice(i, 1); } };
+        syncDrivers();
+        return function () {
+          var i = frameSubs.indexOf(cb); if (i >= 0) { frameSubs.splice(i, 1); }
+          syncDrivers();
+        };
       }
     };
   })();
 
-  // ---- world-simulator event bus — plan.md Phase 3 ------------------------
+  // ---- world-simulator event bus ------------------------------------------
   var events = (function () {
     var topics = {};
     return {
@@ -151,7 +168,7 @@ window.radix = (function () {
     };
   })();
 
-  // ---- fake entity store — plan.md Phase 2 (hand-written) ------------------
+  // ---- entity store --------------------------------------------------------
   // The in-memory working set is the synchronous source of truth — the contract
   // is synchronous (query/create return, subscribe fires, immediately). IndexedDB
   // sits underneath as persistence: the store hydrates from it on load and writes
@@ -265,13 +282,29 @@ window.radix = (function () {
       }
       return true;
     }
+    // Write-through is coalesced: a mutation only marks its collection dirty and
+    // schedules one flush on the next macrotask. A synchronous burst of writes
+    // (e.g. seeding or importing N rows) then costs one save per touched
+    // collection instead of N full-collection serializations. Uses the real
+    // setTimeout — the store runs outside the prototype's clock-shimmed scope.
+    var dirty = {};
+    var flushScheduled = false;
+    function flushDirty() {
+      flushScheduled = false;
+      if (!persistOn) { dirty = {}; return; }
+      var pending = dirty; dirty = {};
+      for (var c in pending) {
+        try { idb.save(c, rows(c), idn).catch(function () {}); } catch (e) {}
+      }
+    }
     function persist(c) {
       if (!persistOn || suspend) { return; }
-      try { idb.save(c, rows(c), idn).catch(function () {}); } catch (e) {}
+      dirty[c] = true;
+      if (!flushScheduled) { flushScheduled = true; setTimeout(flushDirty, 0); }
     }
     function persistAll() {
       if (!persistOn) { return; }
-      for (var c in store) { persist(c); }
+      for (var c in store) { try { idb.save(c, rows(c), idn).catch(function () {}); } catch (e) {} }
     }
     function normalizeField(f) {
       return (typeof f === 'string') ? { type: f } : f;
@@ -322,8 +355,34 @@ window.radix = (function () {
       log.warn(msg);
       return false;
     }
+    // Surface typo'd collection names. Once any schema is declared we assume the
+    // app is schema-driven, so a call against an undeclared collection is almost
+    // always a typo. Warn once per name (never throw — schemaless collections are
+    // still allowed for apps that never call define()).
+    var _warnedColl = {};
+    function checkKnownCollection(c, op) {
+      if (_schema[c]) { return; }
+      if (!Object.keys(_schema).length) { return; }   // schemaless app — stay quiet
+      if (_warnedColl[c]) { return; }
+      _warnedColl[c] = true;
+      log.warn('db.' + op + ': collection "' + c + '" was never declared with db.define()');
+    }
+    // Surface typo'd field names in query where/order against a declared schema.
+    function validateQueryFields(c, args) {
+      var cs = _schema[c];
+      if (!cs || !cs.fields) { return; }
+      function checkField(f, place) {
+        if (f === 'id' || cs.fields[f]) { return; }
+        var msg = 'db.query(' + c + '): unknown field "' + f + '" in ' + place;
+        if (cs.strict) { throw new Error(msg); }
+        log.warn(msg);
+      }
+      if (args.where) { for (var k in args.where) { checkField(k, 'where'); } }
+      if (args.order && args.order.field) { checkField(args.order.field, 'order'); }
+    }
     var api = {
       create: function (c, data) {
+        checkKnownCollection(c, 'create');
         var d = applyDefaults(c, data);
         var id;
         if (d && d.id) { id = d.id; }
@@ -339,24 +398,37 @@ window.radix = (function () {
         return ent;
       },
       update: function (c, id, patch) {
+        checkKnownCollection(c, 'update');
         if (!blockIfImmutable(c, 'update')) { return undefined; }
-        validateData(c, patch, 'update');
         var m = store[c] || (store[c] = {});
-        var cur = m[id] || { id: id };
-        var ent = Object.assign({}, cur, patch, { id: id });
+        var cur = m[id];
+        // Don't fabricate rows: updating an id that doesn't exist is a bug, not
+        // an upsert. Throw in strict mode, warn-and-skip otherwise.
+        if (cur === undefined && !suspend) {
+          var cs = _schema[c];
+          var miss = 'db.update(' + c + '): no row with id "' + id + '"';
+          if (cs && cs.strict) { throw new Error(miss); }
+          log.warn(miss);
+          return undefined;
+        }
+        validateData(c, patch, 'update');
+        var ent = Object.assign({}, cur || { id: id }, patch, { id: id });
         m[id] = ent;
         if (!suspend) { touched = true; }
         notify(c); persist(c);
         return ent;
       },
       delete: function (c, id) {
+        checkKnownCollection(c, 'delete');
         if (!blockIfImmutable(c, 'delete')) { return; }
         var m = store[c];
         if (m) { delete m[id]; if (!suspend) { touched = true; } notify(c); persist(c); }
       },
-      get: function (c, id) { var m = store[c]; return m ? m[id] : undefined; },
+      get: function (c, id) { checkKnownCollection(c, 'get'); var m = store[c]; return m ? m[id] : undefined; },
       query: function (c, args) {
+        checkKnownCollection(c, 'query');
         args = args || {};
+        validateQueryFields(c, args);
         var out = rows(c).filter(function (r) { return matchWhere(r, args.where); });
         if (args.order) {
           var f = args.order.field, dir = args.order.dir === 'desc' ? -1 : 1;
@@ -373,7 +445,14 @@ window.radix = (function () {
             for (var key in args.include) {
               var rel = args.include[key];
               var col = store[rel.from] || {};
-              ext[key] = col[r[rel.on]];
+              var fk = r[rel.on];
+              var target = col[fk];
+              // A present FK that resolves to nothing is a broken relation —
+              // surface it instead of silently embedding undefined.
+              if (target === undefined && fk !== undefined && fk !== null) {
+                log.warn('db.query(' + c + '): include "' + key + '" found no ' + rel.from + ' row for ' + rel.on + '=' + JSON.stringify(fk));
+              }
+              ext[key] = target;
             }
             return ext;
           });
@@ -381,8 +460,11 @@ window.radix = (function () {
         return out;
       },
       subscribe: function (c, cb) {
+        checkKnownCollection(c, 'subscribe');
         (subs[c] || (subs[c] = [])).push(cb);
-        cb(rows(c));
+        // Fire immediately with current rows. Guard like notify() does, so a
+        // throwing subscriber can't break the subscribe() call itself.
+        try { cb(rows(c)); } catch (e) {}
         return function () {
           var a = subs[c]; if (!a) { return; }
           var i = a.indexOf(cb); if (i >= 0) { a.splice(i, 1); }
@@ -465,15 +547,18 @@ window.radix = (function () {
     return api;
   })();
 
-  // ---- simulation log — notes.md §5 ---------------------------------------
+  // ---- simulation log ------------------------------------------------------
   var log = (function () {
+    var MAX = 2000;          // ring-buffer cap: a runaway logger can't grow forever
     var entries = [];
     var subs = [];
     function emit(level, msg, data) {
       var e = { t: clock.now(), level: level, msg: msg, data: data };
       entries.push(e);
+      if (entries.length > MAX) { entries.splice(0, entries.length - MAX); }
+      var snap = entries.slice();
       var list = subs.slice();
-      for (var i = 0; i < list.length; i++) { try { list[i](entries.slice()); } catch (err) {} }
+      for (var i = 0; i < list.length; i++) { try { list[i](snap); } catch (err) {} }
     }
     function fn(level, msg, data) { emit(level, msg, data); }
     fn.debug = function (m, d) { emit('debug', m, d); };
@@ -588,7 +673,7 @@ window.radix = (function () {
     };
   }
 
-  // ---- stub — the graceful-degradation hook (plan Phase 9) -----------------
+  // ---- stub — the graceful-degradation hook --------------------------------
   // A first-class way for a prototype to declare "this part is faked or
   // partial, and here is what is missing". Declarations are queryable by the
   // app (to render a what-is-real panel), logged once, and exposed to the
@@ -618,17 +703,45 @@ window.radix = (function () {
   })();
 
   // ---- shell message bridge -----------------------------------------------
-  // Allows the Radix app shell to inspect and control the prototype from
-  // outside the iframe via postMessage (cross-origin direct access is blocked).
+  // Lets the Radix app shell inspect and control the prototype from outside the
+  // iframe via postMessage. The prototype can hold user data, so the bridge is
+  // locked down on both directions:
+  //   - Inbound: we only accept messages from our *direct parent* window
+  //     (e.source === window.parent), and — if packaging pinned an expected
+  //     shell origin — only from that origin. This blocks sibling iframes and
+  //     unrelated windows from dumping/resetting/driving the prototype.
+  //   - Outbound: we never post to '*'. Responses go back to the sender at its
+  //     exact origin; unsolicited pushes go to the parent we learned from the
+  //     first accepted message (so nothing is broadcast before a handshake).
+  // PINNED_ORIGIN is substituted by wrapPrototype; '' means "not pinned, rely on
+  // the source === parent check and echo the sender's origin".
+  var PINNED_ORIGIN = '__RADIX_SHELL_ORIGIN__';
+  var shellWindow = null;   // the parent window we reply to for unsolicited pushes
+  var shellOrigin = null;   // the exact origin to target those pushes at
+  function accepts(e) {
+    if (e.source !== window.parent) { return false; }
+    if (PINNED_ORIGIN && e.origin !== PINNED_ORIGIN) { return false; }
+    return true;
+  }
+  function reply(e, msg) {
+    try { e.source.postMessage(msg, e.origin); } catch (err) {}
+  }
+  function pushToShell(msg) {
+    if (!shellWindow) { return; }
+    try { shellWindow.postMessage(msg, shellOrigin); } catch (err) {}
+  }
   window.addEventListener('message', function (e) {
     if (!e.data || typeof e.data !== 'object') { return; }
+    if (!accepts(e)) { return; }
+    // Remember who to push to (the first verified parent wins for the session).
+    if (!shellWindow) { shellWindow = e.source; shellOrigin = e.origin; }
     if (e.data.type === 'radix:dump') {
-      window.parent.postMessage({ type: 'radix:dump:response', data: db.dump() }, '*');
+      reply(e, { type: 'radix:dump:response', data: db.dump() });
     } else if (e.data.type === 'radix:db:schema') {
-      window.parent.postMessage({ type: 'radix:db:schema:response', schema: db.schema() }, '*');
+      reply(e, { type: 'radix:db:schema:response', schema: db.schema() });
     } else if (e.data.type === 'radix:reset') {
       db.reset();
-      window.parent.postMessage({ type: 'radix:reset:done', data: db.dump() }, '*');
+      reply(e, { type: 'radix:reset:done', data: db.dump() });
     } else if (e.data.type === 'radix:clock:play') {
       clock.play();
     } else if (e.data.type === 'radix:clock:pause') {
@@ -636,25 +749,34 @@ window.radix = (function () {
     } else if (e.data.type === 'radix:clock:step') {
       clock.step(typeof e.data.ms === 'number' ? e.data.ms : 1000);
     } else if (e.data.type === 'radix:clock:get') {
-      window.parent.postMessage({ type: 'radix:clock:state', now: clock.now(), running: clock.isRunning() }, '*');
+      reply(e, { type: 'radix:clock:state', now: clock.now(), running: clock.isRunning() });
     } else if (e.data.type === 'radix:log:get') {
-      window.parent.postMessage({ type: 'radix:log:entries', entries: log.entries() }, '*');
+      reply(e, { type: 'radix:log:entries', entries: log.entries() });
     } else if (e.data.type === 'radix:stubs') {
-      window.parent.postMessage({ type: 'radix:stubs:response', stubs: stub.list() }, '*');
+      reply(e, { type: 'radix:stubs:response', stubs: stub.list() });
     }
   });
 
   // Push clock and log state to the shell whenever they change. Throttled:
   // with a frame loop active the clock notifies ~60x/sec, which would flood
-  // the shell; play/pause transitions always go through immediately.
+  // the shell; play/pause transitions always go through immediately. Nothing is
+  // sent until the first accepted message tells us who the parent is.
   var lastClockPush = -1, lastClockRunning = null;
   clock.subscribe(function (now, running) {
     if (running === lastClockRunning && lastClockPush >= 0 && now - lastClockPush < 100) { return; }
     lastClockPush = now; lastClockRunning = running;
-    try { window.parent.postMessage({ type: 'radix:clock:state', now: now, running: running }, '*'); } catch (err) {}
+    pushToShell({ type: 'radix:clock:state', now: now, running: running });
   });
-  log.subscribe(function (entries) {
-    try { window.parent.postMessage({ type: 'radix:log:entries', entries: entries }, '*'); } catch (err) {}
+  // Log lines can arrive in tight bursts (a chatty actor, a tick loop). Coalesce
+  // them into at most one push per 100ms with a trailing send of the latest
+  // entries, and only once we know who the parent is.
+  var logPushTimer = null;
+  log.subscribe(function () {
+    if (logPushTimer || !shellWindow) { return; }
+    logPushTimer = setTimeout(function () {
+      logPushTimer = null;
+      pushToShell({ type: 'radix:log:entries', entries: log.entries() });
+    }, 100);
   });
 
   return { db: db, events: events, clock: clock, random: random, log: log, actor: actor, services: services, stub: stub };

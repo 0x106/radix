@@ -1,9 +1,9 @@
-// PHASE 0 EXAMPLE — CRUD prototype: a habit tracker.
+// CRUD prototype: a habit tracker.
 //
 // Purpose: exercise the `db` handle (create / update / delete / query /
 // subscribe / reset) end to end, with a real little UI on top, to discover what
 // the schema-driven store contract actually needs to feel like. The fake DB is
-// the hand-written in-memory store in runtimeSource.ts.
+// the hand-written in-memory store in src/runtime/source.ts.
 //
 // Authored as browser-ESM source (no JSX). `React` and `window.radix` are in
 // scope (see wrapPrototype); the source assigns the component to `window.App`.
@@ -11,7 +11,7 @@
 export const habits = {
   name: "Habits (CRUD example)",
   description:
-    "Phase 0 example: a habit tracker wired to the fake db — add, toggle, delete, reset to seed.",
+    "A habit tracker wired to the fake db — add, toggle, delete, reset to seed.",
   source: /* js */ `
     const { useState, useEffect } = React;
     const h = React.createElement;

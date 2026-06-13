@@ -8,7 +8,7 @@
 // handle exists to say out loud.
 //
 // What it surfaced (recorded in runtime-contract.md):
-//   - Needed the `stub` handle (plan Phase 9) — this example's honesty panel
+//   - Needed the `stub` handle — this example's honesty panel
 //     ("what's real vs pretend") is built entirely on radix.stub declarations,
 //     and the shell can read the same list over the bridge.
 //   - "Running" an AI prototype decomposes cleanly onto existing handles:

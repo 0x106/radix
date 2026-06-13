@@ -1,4 +1,4 @@
-// PHASE 0 EXAMPLE — reactive prototype: a chat screen.
+// reactive prototype: a chat screen.
 //
 // Purpose: exercise the *world foundation* (notes.md §3) — `events` (subscribe/
 // publish), the seeded `spawn` actor primitive, the simulated `clock`, and
@@ -12,7 +12,7 @@
 export const chat = {
   name: "Chat (reactive example)",
   description:
-    "Phase 0 example: a chat screen driven by a seeded world-actor over the simulated clock — pause/step to control it.",
+    "A chat screen driven by a seeded world-actor over the simulated clock — pause/step to control it.",
   source: /* js */ `
     const { useState, useEffect } = React;
     const h = React.createElement;
